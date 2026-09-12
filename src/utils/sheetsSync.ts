@@ -194,6 +194,45 @@ function doPost(e) {
     var token = data.channelAccessToken || LINE_CHANNEL_ACCESS_TOKEN;
     var target = data.targetId || LINE_TARGET_GROUP_ID || LINE_TARGET_USER_ID;
 
+    // 0. รองรับ LINE Webhook อัตโนมัติ (พิมพ์หาบอท หรือดึงบอทเข้ากลุ่ม บอทจะตอบกลับ ID ให้ทันที)
+    if (data && data.events && Array.isArray(data.events)) {
+      data.events.forEach(function(event) {
+        var replyToken = event.replyToken;
+        var source = event.source || {};
+        var groupId = source.groupId || "";
+        var userId = source.userId || "";
+        var roomId = source.roomId || "";
+        
+        var replyText = "";
+        if (groupId) {
+          replyText = "🆔 LINE Group ID ของกลุ่มนี้คือ:\\n" + groupId + "\\n\\n(คัดลอก ID นี้ไปใส่ในช่อง LINE Group ID ในระบบ JobTracker Pro ได้เลยครับ)";
+        } else if (userId) {
+          replyText = "🆔 LINE User ID ของคุณคือ:\\n" + userId + "\\n\\n(คัดลอก ID นี้ไปใส่ในระบบ JobTracker Pro ได้เลยครับ)";
+        }
+
+        if (replyToken && replyText) {
+          try {
+            UrlFetchApp.fetch("https://api.line.me/v2/bot/message/reply", {
+              method: "post",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + token
+              },
+              payload: JSON.stringify({
+                replyToken: replyToken,
+                messages: [{ type: "text", text: replyText }]
+              }),
+              muteHttpExceptions: true
+            });
+          } catch(eReply) {
+            Logger.log("Reply err: " + eReply);
+          }
+        }
+      });
+      return ContentService.createTextOutput(JSON.stringify({ status: "ok" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     // 1. ทดสอบการเชื่อมต่อ (Test Connection)
     if (data && (data.action === 'test_connection' || data.action === 'test')) {
       var sampleJob = data.job || {
@@ -468,19 +507,28 @@ function pushLineFlex(targetId, job, companyName, headerLabel, dynamicToken) {
   };
 
   var response = UrlFetchApp.fetch("https://api.line.me/v2/bot/message/push", options);
-  return response.getContentText();
+  var respCode = response.getResponseCode();
+  var respContent = response.getContentText();
+  Logger.log("LINE Push Response [" + respCode + "]: " + respContent);
+  
+  if (respCode !== 200) {
+    Logger.log("⚠️ LINE Push Failed! Please verify that LINE Bot is invited to group/chat and Token is valid.");
+  } else {
+    Logger.log("✅ LINE Flex Message sent successfully!");
+  }
+  return respContent;
 }
 
-// 🧪 ทดสอบส่ง Flex เข้า Group ได้ทันทีในหน้า Apps Script
+// 🧪 ฟังก์ชันที่ 1: ทดสอบยิงเข้ากลุ่ม LINE (รันใน Apps Script เพื่อดู Execution Log ได้ทันที)
 function testLinePushToGroup() {
   var sampleJob = {
-    jobCode: "JOB-2026-TEST",
+    jobCode: "JOB-TEST-" + Date.now().toString().slice(-4),
     title: "ทดสอบการส่งการ์ด LINE Flex เข้ากลุ่ม",
     status: "in_progress",
     contactPerson: "คุณสมชาย",
     phoneNumber: "081-234-5678",
     productBrand: "SCG",
-    productDetails: "งานติดตั้งสมาร์ทบอร์ด",
+    productDetails: "งานติดตั้งและตรวจสอบคุณภาพ",
     price: 15500,
     paymentType: "เงินสด",
     location: { address: "กรุงเทพมหานคร", lat: 13.7563, lng: 100.5018 },
@@ -488,7 +536,27 @@ function testLinePushToGroup() {
     time: "10:30"
   };
   var result = pushLineFlex(LINE_TARGET_GROUP_ID, sampleJob, "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด", "🧪 ทดสอบส่ง Flex เข้ากลุ่ม", LINE_CHANNEL_ACCESS_TOKEN);
-  Logger.log("Result: " + result);
+  Logger.log("Final Result: " + result);
+}
+
+// 🧪 ฟังก์ชันที่ 2: ทดสอบยิงเข้าบัญชีส่วนตัว LINE User
+function testLinePushToUser() {
+  var sampleJob = {
+    jobCode: "JOB-USER-" + Date.now().toString().slice(-4),
+    title: "ทดสอบส่งเข้า LINE ส่วนตัว",
+    status: "completed",
+    contactPerson: "ลูกค้าตัวอย่าง",
+    phoneNumber: "089-999-8888",
+    productBrand: "TOA",
+    productDetails: "งานส่งมอบงาน",
+    price: 8500,
+    paymentType: "โอนเงิน",
+    location: { address: "กรุงเทพมหานคร", lat: 13.7563, lng: 100.5018 },
+    date: "2026-09-12",
+    time: "14:00"
+  };
+  var result = pushLineFlex(LINE_TARGET_USER_ID, sampleJob, "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด", "🧪 ทดสอบส่งเข้าส่วนตัว", LINE_CHANNEL_ACCESS_TOKEN);
+  Logger.log("User Push Result: " + result);
 }
 `;
 };
@@ -747,9 +815,10 @@ export const testSystemConnection = async (settings: SyncSettings): Promise<{ su
 
     if (response.ok) {
       const data = await response.json();
-      if (data.status === 'success') {
+      if (data.success || data.status === 'success') {
+        const lineSuccess = data.diagnostics?.lineTest?.success !== false;
         return {
-          success: true,
+          success: lineSuccess,
           diagnostics: data.diagnostics || { lineApi: 'ok' },
         };
       }
@@ -792,9 +861,11 @@ export const testSystemConnection = async (settings: SyncSettings): Promise<{ su
       return {
         success: true,
         diagnostics: {
+          status: 'success',
           lineApi: 'ok',
           sentVia: 'Google Apps Script (GitHub Pages Client)',
           targetId: targetId,
+          note: 'ส่งคำขอไปยัง Google Apps Script สำเร็จ',
         },
       };
     } catch (clientErr: any) {

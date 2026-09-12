@@ -139,15 +139,26 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
     setIsTesting(false);
     setTestResult(result.diagnostics);
 
-    if (result.diagnostics?.lineTest?.success) {
+    // Check if test succeeded either via server proxy or client Apps Script relay
+    const isLineOk =
+      result.success ||
+      result.diagnostics?.lineTest?.success === true ||
+      result.diagnostics?.lineApi === 'ok' ||
+      result.diagnostics?.status === 'success';
+
+    if (isLineOk) {
       setStatusMessage({
-        text: '✅ ส่ง LINE Flex Message เข้ากลุ่มสำเร็จ! ตรวจสอบในกลุ่ม LINE ของคุณได้เลย',
+        text: '✅ ส่งคำสั่งทดสอบ LINE Flex Message เข้ากลุ่มเรียบร้อยแล้ว! (หากข้อความยังไม่ขึ้น กรุณาตรวจสอบว่า Group ID ตรงกับกลุ่มจริง และ Token ยังไม่หมดอายุ)',
         type: 'success',
       });
     } else {
-      const err = result.diagnostics?.lineTest?.error || result.diagnostics?.error || 'เกิดข้อผิดพลาด';
+      const err =
+        result.diagnostics?.lineTest?.error ||
+        result.diagnostics?.error ||
+        result.diagnostics?.lineTest?.details ||
+        'เกิดข้อผิดพลาดในการส่งคำขอ';
       setStatusMessage({
-        text: `⚠️ LINE API แจ้งเตือน: ${err} (อย่าลืมเชิญ LINE Bot เข้ากลุ่ม)`,
+        text: `⚠️ ตรวจพบข้อผิดพลาด: ${err}`,
         type: 'error',
       });
     }
