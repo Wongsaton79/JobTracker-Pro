@@ -331,6 +331,28 @@ function appendOrUpdateJob(sheet, job) {
     }
   }
 
+  // 📸 บันทึกรูปภาพ Base64 จากกล้อง/มือถือ ลง Google Drive เพื่อสร้างลิงก์รูปภาพจริงแบบ HTTPS สำหรับ LINE Flex
+  var permanentPhotoUrls = [];
+  if (job.photos && Array.isArray(job.photos)) {
+    for (var p = 0; p < job.photos.length; p++) {
+      var photoObj = job.photos[p];
+      var pUrl = (photoObj && photoObj.url) ? photoObj.url : (typeof photoObj === 'string' ? photoObj : '');
+      if (pUrl) {
+        if (pUrl.indexOf('data:image/') === 0) {
+          var driveUrl = saveBase64ImageToDrive(pUrl, (job.jobCode || 'job') + '_photo_' + (p + 1) + '.jpg');
+          if (driveUrl) {
+            if (typeof job.photos[p] === 'object') {
+              job.photos[p].url = driveUrl;
+            }
+            permanentPhotoUrls.push(driveUrl);
+          }
+        } else if (pUrl.indexOf('http') === 0) {
+          permanentPhotoUrls.push(pUrl);
+        }
+      }
+    }
+  }
+
   var rowData = [
     jobCode,
     job.date || new Date().toISOString().substring(0, 10),
@@ -348,7 +370,7 @@ function appendOrUpdateJob(sheet, job) {
     (job.location && job.location.lng) || "",
     job.location ? ("https://www.google.com/maps?q=" + job.location.lat + "," + job.location.lng) : "",
     (job.photos ? job.photos.length : 0),
-    (job.photos ? job.photos.map(function(p){ return p.url; }).join(" | ") : ""),
+    (permanentPhotoUrls.length > 0 ? permanentPhotoUrls.join(" | ") : (job.photos ? job.photos.map(function(p){ return p.url || ''; }).filter(function(u){ return u && u.indexOf('http') === 0; }).join(" | ") : "")),
     job.notes || "",
     job.assignedTo || "",
     job.updatedAt || new Date().toISOString()
@@ -358,6 +380,45 @@ function appendOrUpdateJob(sheet, job) {
     sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
   } else {
     sheet.appendRow(rowData);
+  }
+}
+
+// 📂 ฟังก์ชันบันทึกภาพ Base64 ลงใน Google Drive โฟลเดอร์ "JobTracker_Photos" และเปิดสิทธิ์ Public View
+function saveBase64ImageToDrive(base64Data, fileName) {
+  try {
+    if (!base64Data || typeof base64Data !== 'string') return "";
+    if (base64Data.indexOf('http') === 0) return base64Data;
+
+    var contentType = "image/jpeg";
+    var cleanBase64 = base64Data;
+    if (base64Data.indexOf('data:') === 0) {
+      var parts = base64Data.split(',');
+      var mimePart = parts[0].match(/:(.*?);/);
+      if (mimePart) contentType = mimePart[1];
+      cleanBase64 = parts[1];
+    }
+
+    var decoded = Utilities.base64Decode(cleanBase64);
+    var blob = Utilities.newBlob(decoded, contentType, fileName || ("job_photo_" + Date.now() + ".jpg"));
+
+    var folderName = "JobTracker_Photos";
+    var folders = DriveApp.getFoldersByName(folderName);
+    var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
+
+    try {
+      folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch (eFolder) {}
+
+    var file = folder.createFile(blob);
+    try {
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch (eFile) {}
+
+    var fileId = file.getId();
+    return "https://lh3.googleusercontent.com/d/" + fileId;
+  } catch (err) {
+    Logger.log("Save Base64 to Drive Error: " + err);
+    return "";
   }
 }
 
@@ -747,6 +808,7 @@ export const saveAndNotifyJob = async (
           triggerType: triggerType,
           job: job,
           targetId: options?.targetId || 'C341417bcb6e853c320eaf9d80963cda3',
+          channelAccessToken: options?.channelAccessToken,
           companyName: options?.companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
           eventLabel: eventLabel,
           sendLine: options?.sendLine !== false,

@@ -329,6 +329,7 @@ app.post('/api/sync/save-and-notify', async (req, res) => {
       triggerType,
       job,
       targetId: targetId || DEFAULT_LINE_GROUP,
+      channelAccessToken: channelAccessToken || DEFAULT_LINE_TOKEN,
       companyName: companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
       eventLabel,
       sendLine: sendLine !== false,

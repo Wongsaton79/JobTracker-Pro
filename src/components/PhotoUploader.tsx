@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Camera, Image as ImageIcon, Trash2, X, RefreshCw, Eye, Check, Tag } from 'lucide-react';
+import { Camera, Image as ImageIcon, Trash2, X, RefreshCw, Eye } from 'lucide-react';
 import { JobPhoto } from '../types';
 
 interface PhotoUploaderProps {
@@ -7,6 +7,53 @@ interface PhotoUploaderProps {
   onChange: (photos: JobPhoto[]) => void;
   maxPhotos?: number;
 }
+
+// 🗜️ Helper to compress and resize images on client-side (max 1200px, JPEG 0.78 quality ~90-150KB)
+const compressImage = (fileOrDataUrl: File | string, maxWidth = 1200, quality = 0.78): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width > maxWidth || height > maxWidth) {
+        if (width > height) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        } else {
+          width = Math.round((width * maxWidth) / height);
+          height = maxWidth;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } else {
+        resolve(typeof fileOrDataUrl === 'string' ? fileOrDataUrl : '');
+      }
+    };
+    img.onerror = () => {
+      resolve(typeof fileOrDataUrl === 'string' ? fileOrDataUrl : '');
+    };
+
+    if (typeof fileOrDataUrl === 'string') {
+      img.src = fileOrDataUrl;
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (e.target?.result) {
+          img.src = e.target.result as string;
+        } else {
+          resolve('');
+        }
+      };
+      reader.readAsDataURL(fileOrDataUrl);
+    }
+  });
+};
 
 export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   photos,
@@ -17,6 +64,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<JobPhoto | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -75,7 +123,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   };
 
   // Capture photo from video stream
-  const captureSnapshot = () => {
+  const captureSnapshot = async () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
     const canvas = document.createElement('canvas');
@@ -86,7 +134,11 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     if (!ctx) return;
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const rawDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+    setIsProcessing(true);
+    const compressedUrl = await compressImage(rawDataUrl, 1200, 0.78);
+    setIsProcessing(false);
 
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now
@@ -96,7 +148,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
 
     const newPhoto: JobPhoto = {
       id: `photo-${Date.now()}`,
-      url: dataUrl,
+      url: compressedUrl,
       source: 'camera',
       tag: 'during',
       timestamp: timeStr,
@@ -107,10 +159,11 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   };
 
   // Handle files selected from gallery or native file input
-  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    setIsProcessing(true);
     const newPhotosList: JobPhoto[] = [...photos];
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now
@@ -118,25 +171,26 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
       .toString()
       .padStart(2, '0')}`;
 
-    Array.from(files).forEach((file: File, index: number) => {
-      if (newPhotosList.length >= maxPhotos) return;
+    const filesArray: File[] = Array.from(files);
+    for (let i = 0; i < filesArray.length; i++) {
+      if (newPhotosList.length >= maxPhotos) break;
+      const file: File = filesArray[i];
+      try {
+        const compressedUrl = await compressImage(file, 1200, 0.78);
+        newPhotosList.push({
+          id: `photo-${Date.now()}-${i}`,
+          url: compressedUrl,
+          source: 'gallery',
+          tag: 'site_overview',
+          timestamp: timeStr,
+        });
+      } catch (compressErr) {
+        console.warn('Image compression failed:', compressErr);
+      }
+    }
 
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          newPhotosList.push({
-            id: `photo-${Date.now()}-${index}`,
-            url: event.target.result as string,
-            source: 'gallery',
-            tag: 'site_overview',
-            timestamp: timeStr,
-          });
-          onChange([...newPhotosList]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-
+    setIsProcessing(false);
+    onChange([...newPhotosList]);
     e.target.value = '';
   };
 
@@ -175,11 +229,11 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         <button
           type="button"
           onClick={() => startCamera('environment')}
-          disabled={photos.length >= maxPhotos}
+          disabled={photos.length >= maxPhotos || isProcessing}
           className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3.5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs sm:text-sm font-medium rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50"
         >
           <Camera className="w-4 h-4" />
-          <span>ถ่ายภาพหน้างาน</span>
+          <span>{isProcessing ? 'กำลังประมวลผลรูปภาพ...' : 'ถ่ายภาพหน้างาน'}</span>
         </button>
 
         <button
@@ -190,7 +244,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
               fileInputRef.current.click();
             }
           }}
-          disabled={photos.length >= maxPhotos}
+          disabled={photos.length >= maxPhotos || isProcessing}
           className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-medium rounded-xl transition-all border border-slate-200 active:scale-95 disabled:opacity-50"
         >
           <ImageIcon className="w-4 h-4 text-slate-500" />
@@ -230,7 +284,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
             <button
               type="button"
               onClick={captureSnapshot}
-              className="w-14 h-14 rounded-full bg-white border-4 border-sky-500 flex items-center justify-center shadow-lg active:scale-90 transition-transform"
+              disabled={isProcessing}
+              className="w-14 h-14 rounded-full bg-white border-4 border-sky-500 flex items-center justify-center shadow-lg active:scale-90 transition-transform disabled:opacity-50"
               title="กดเพื่อถ่ายภาพ"
             >
               <div className="w-10 h-10 rounded-full bg-sky-600" />

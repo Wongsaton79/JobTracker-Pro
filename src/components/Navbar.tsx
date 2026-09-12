@@ -5,11 +5,10 @@ import {
   BarChart3,
   MapPin,
   Send,
-  FileSpreadsheet,
+  Settings,
   Smartphone,
   Tablet,
   Monitor,
-  CheckCircle2,
 } from 'lucide-react';
 import { JobItem, SyncSettings } from '../types';
 import { formatCurrency } from '../utils/formatters';
@@ -78,20 +77,23 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
-            {/* Google Sheets Central Database Button */}
+            {/* Discreet Settings Gear Button (Admin / Integration Settings) */}
             <button
               onClick={onOpenSheetsSettings}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all shadow-xs border ${
+              className={`relative w-9 h-9 rounded-xl flex items-center justify-center transition-all border ${
                 isSheetConnected
-                  ? 'bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 border-emerald-500/50 ring-1 ring-emerald-500/30'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                  ? 'bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700 hover:border-slate-600'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border-slate-700'
               }`}
-              title="Google Sheets Database Connection"
+              title="ตั้งค่าระบบ (Settings & Database)"
+              aria-label="ตั้งค่าระบบ"
             >
-              <FileSpreadsheet className={`w-4 h-4 ${isSheetConnected ? 'text-emerald-400' : 'text-slate-400'}`} />
-              <span className="hidden sm:inline">ฐานข้อมูล Google Sheets</span>
+              <Settings className="w-4 h-4 text-slate-400 hover:text-white transition-transform duration-300 hover:rotate-45" />
               {isSheetConnected && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Connected" />
+                <span
+                  className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-slate-900"
+                  title="Google Sheets & LINE Connected"
+                />
               )}
             </button>
 
