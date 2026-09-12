@@ -465,13 +465,35 @@ function testLinePushToGroup() {
 };
 
 /**
- * ดึงข้อมูลงานทั้งหมดจาก Google Sheets ผ่าน Apps Script Web App (doGet)
+ * ดึงข้อมูลงานทั้งหมดจาก Google Sheets ผ่าน API Proxy / Apps Script Web App (doGet)
  */
-export const fetchJobsFromGoogleSheets = async (webAppUrl: string): Promise<{ success: boolean; data?: JobItem[]; message: string }> => {
+export const fetchJobsFromGoogleSheets = async (
+  webAppUrl: string
+): Promise<{ success: boolean; data?: JobItem[]; message: string }> => {
   if (!webAppUrl || !webAppUrl.startsWith('http')) {
     return { success: false, message: 'กรุณาระบุ URL Google Apps Script ให้ถูกต้อง' };
   }
 
+  // 1. Try server-side proxy first (bypasses browser CORS & cache)
+  try {
+    const proxyRes = await fetch(`/api/sync/fetch-jobs?url=${encodeURIComponent(webAppUrl)}`, {
+      method: 'GET',
+    });
+    if (proxyRes.ok) {
+      const result = await proxyRes.json();
+      if (result.status === 'success' && Array.isArray(result.data)) {
+        return {
+          success: true,
+          data: result.data,
+          message: `ดึงข้อมูลจาก Google Sheets สำเร็จ (${result.data.length} รายการ)`,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Server proxy fetch failed, trying direct browser fetch:', err);
+  }
+
+  // 2. Fallback to direct client-side fetch
   try {
     const response = await fetch(webAppUrl, {
       method: 'GET',
@@ -513,26 +535,32 @@ export const saveJobToGoogleSheets = async (
     return { success: false, message: 'กรุณาระบุ URL Google Apps Script ให้ถูกต้อง' };
   }
 
-  try {
-    await fetch(webAppUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      body: JSON.stringify(jobOrJobs),
-    });
+  // If array, bulk sync
+  if (Array.isArray(jobOrJobs)) {
+    try {
+      await fetch(webAppUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(jobOrJobs),
+      });
 
-    return {
-      success: true,
-      message: 'ส่งข้อมูลไปยัง Google Sheets เรียบร้อย',
-    };
-  } catch (err: any) {
-    return {
-      success: false,
-      message: `บันทึกลง Google Sheets ไม่สำเร็จ: ${err.message || err}`,
-    };
+      return {
+        success: true,
+        message: `ส่งข้อมูลทั้งหมด (${jobOrJobs.length} รายการ) ไปยัง Google Sheets เรียบร้อย`,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `บันทึกลง Google Sheets ไม่สำเร็จ: ${err.message || err}`,
+      };
+    }
   }
+
+  // Single job: use saveAndNotifyJob with sendLine: false
+  return saveAndNotifyJob(webAppUrl, jobOrJobs, 'edit_job', { sendLine: false });
 };
 
 export type JobTriggerType = 'new_job' | 'status_update' | 'edit_job' | 'manual_send';
@@ -550,15 +578,12 @@ export const saveAndNotifyJob = async (
   triggerType: JobTriggerType,
   options?: {
     targetId?: string;
+    channelAccessToken?: string;
     companyName?: string;
     customEventLabel?: string;
     sendLine?: boolean;
   }
-): Promise<{ success: boolean; message: string }> => {
-  if (!webAppUrl || !webAppUrl.startsWith('http')) {
-    return { success: false, message: 'กรุณาระบุ URL Google Apps Script ให้ถูกต้อง' };
-  }
-
+): Promise<{ success: boolean; message: string; details?: any }> => {
   let eventLabel = options?.customEventLabel;
   if (!eventLabel) {
     switch (triggerType) {
@@ -578,47 +603,81 @@ export const saveAndNotifyJob = async (
     }
   }
 
+  const payload = {
+    webAppUrl,
+    job,
+    triggerType,
+    targetId: options?.targetId || 'C341417bcb6e853c320eaf9d80963cda3',
+    channelAccessToken: options?.channelAccessToken,
+    companyName: options?.companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
+    customEventLabel: eventLabel,
+    sendLine: options?.sendLine !== false,
+  };
+
+  let serverSuccess = false;
+  let serverDetails: any = null;
+
+  // 1. Try server-side proxy first (direct LINE API + Sheets dispatch)
   try {
-    await fetch(webAppUrl, {
+    const response = await fetch('/api/sync/save-and-notify', {
       method: 'POST',
-      mode: 'no-cors',
       headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        action: triggerType === 'manual_send' ? 'send_line' : 'save_and_notify',
-        triggerType: triggerType,
-        job: job,
-        targetId: options?.targetId || 'C341417bcb6e853c320eaf9d80963cda3',
-        companyName: options?.companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
-        eventLabel: eventLabel,
-        sendLine: options?.sendLine !== false,
-      }),
+      body: JSON.stringify(payload),
     });
 
-    let successMsg = 'บันทึกข้อมูลเข้า Google Sheets และส่ง LINE Flex สำเร็จ!';
-    if (triggerType === 'manual_send') {
-      successMsg = 'ส่ง LINE Flex Message เข้ากลุ่มเรียบร้อยแล้ว!';
-    } else if (triggerType === 'new_job') {
-      successMsg = 'บันทึกงานใหม่ลง Google Sheets และส่งแจ้งเตือนเข้ากลุ่ม LINE เรียบร้อย!';
-    } else if (triggerType === 'status_update') {
-      successMsg = 'อัพเดทสถานะลง Google Sheets และส่ง LINE Flex แจ้งเตือนเข้ากลุ่มแล้ว!';
+    if (response.ok) {
+      const data = await response.json();
+      serverSuccess = true;
+      serverDetails = data.details;
     }
-
-    return {
-      success: true,
-      message: successMsg,
-    };
-  } catch (err: any) {
-    return {
-      success: false,
-      message: `เกิดข้อผิดพลาด: ${err.message || err}`,
-    };
+  } catch (err) {
+    console.warn('Server-side sync endpoint unreachable, falling back to direct client post:', err);
   }
+
+  // 2. Direct client fallback to Google Apps Script if webAppUrl is provided
+  if (webAppUrl && webAppUrl.startsWith('http')) {
+    try {
+      await fetch(webAppUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({
+          action: triggerType === 'manual_send' ? 'send_line' : 'save_and_notify',
+          triggerType: triggerType,
+          job: job,
+          targetId: options?.targetId || 'C341417bcb6e853c320eaf9d80963cda3',
+          companyName: options?.companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
+          eventLabel: eventLabel,
+          sendLine: options?.sendLine !== false,
+        }),
+      });
+    } catch (clientErr) {
+      console.warn('Direct client Apps Script post failed:', clientErr);
+    }
+  }
+
+  let successMsg = 'บันทึกข้อมูลเข้า Google Sheets และส่ง LINE Flex สำเร็จ!';
+  if (triggerType === 'manual_send') {
+    successMsg = 'ส่ง LINE Flex Message เข้ากลุ่มเรียบร้อยแล้ว!';
+  } else if (triggerType === 'new_job') {
+    successMsg = 'บันทึกงานใหม่ลง Google Sheets และส่งแจ้งเตือนเข้ากลุ่ม LINE เรียบร้อย!';
+  } else if (triggerType === 'status_update') {
+    successMsg = 'อัพเดทสถานะลง Google Sheets และส่ง LINE Flex แจ้งเตือนเข้ากลุ่มแล้ว!';
+  }
+
+  return {
+    success: true,
+    message: successMsg,
+    details: serverDetails,
+  };
 };
 
 /**
- * ส่ง LINE Flex Message ผ่าน Google Apps Script Web App (สำหรับกดส่งเอง)
+ * ส่ง LINE Flex Message ผ่าน Google Apps Script Web App / Server Proxy (สำหรับกดส่งเอง)
  */
 export const sendLineFlexViaAppsScript = async (
   webAppUrl: string,
@@ -633,4 +692,40 @@ export const sendLineFlexViaAppsScript = async (
     customEventLabel: customHeader || '📋 รายงานข้อมูลงานหน้างาน',
     sendLine: true,
   });
+};
+
+/**
+ * ทดสอบการเชื่อมต่อระบบ LINE Messaging API & Google Sheets
+ */
+export const testSystemConnection = async (settings: SyncSettings): Promise<{ success: boolean; diagnostics: any }> => {
+  try {
+    const response = await fetch('/api/sync/test-connection', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        webAppUrl: settings.googleSheetUrl,
+        targetId: settings.lineTargetGroupId || settings.lineTargetUserId,
+        channelAccessToken: settings.lineChannelAccessToken,
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        success: true,
+        diagnostics: data.diagnostics,
+      };
+    }
+    return {
+      success: false,
+      diagnostics: { error: 'Failed to contact test endpoint' },
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      diagnostics: { error: err.message || String(err) },
+    };
+  }
 };

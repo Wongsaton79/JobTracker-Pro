@@ -99,18 +99,14 @@ export default function App() {
 
   // 1. ฟังก์ชันกดส่งเอง (Direct Manual Send LINE Flex Message เข้า Group)
   const handleDirectSendLineFlex = async (job: JobItem, customHeader?: string) => {
-    if (!settings.googleSheetUrl || !settings.googleSheetUrl.startsWith('http')) {
-      showToast('กรุณาตั้งค่า Google Sheets Web App URL ก่อนส่ง', 'error');
-      setIsSheetsModalOpen(true);
-      return;
-    }
-
     showToast(`กำลังส่ง LINE Flex สำหรับ "${job.title}" เข้ากลุ่ม...`, 'info');
     try {
-      const result = await saveAndNotifyJob(settings.googleSheetUrl, job, 'manual_send', {
+      const result = await saveAndNotifyJob(settings.googleSheetUrl || '', job, 'manual_send', {
         targetId: settings.lineTargetGroupId || settings.lineTargetUserId,
+        channelAccessToken: settings.lineChannelAccessToken,
         companyName: settings.companyName,
         customEventLabel: customHeader || '📋 รายงานข้อมูลงานหน้างาน',
+        sendLine: true,
       });
       if (result.success) {
         showToast(`💬 ส่ง LINE Flex เข้ากลุ่มเรียบร้อยแล้ว (${job.jobCode})`, 'success');
@@ -137,20 +133,20 @@ export default function App() {
     setEditingJob(null);
 
     // Auto sync to Google Sheets & auto push LINE Flex message
-    if (settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
-      try {
-        await saveAndNotifyJob(
-          settings.googleSheetUrl,
-          savedJob,
-          isEdit ? 'edit_job' : 'new_job',
-          {
-            targetId: settings.lineTargetGroupId || settings.lineTargetUserId,
-            companyName: settings.companyName,
-          }
-        );
-      } catch (err) {
-        console.warn('Auto sync & notify failed:', err);
-      }
+    try {
+      await saveAndNotifyJob(
+        settings.googleSheetUrl || '',
+        savedJob,
+        isEdit ? 'edit_job' : 'new_job',
+        {
+          targetId: settings.lineTargetGroupId || settings.lineTargetUserId,
+          channelAccessToken: settings.lineChannelAccessToken,
+          companyName: settings.companyName,
+          sendLine: true,
+        }
+      );
+    } catch (err) {
+      console.warn('Auto sync & notify failed:', err);
     }
   };
 
@@ -181,15 +177,17 @@ export default function App() {
 
     showToast('⚡ อัพเดทสถานะลง Sheet และส่ง LINE แจ้งเตือนแล้ว', 'success');
 
-    if (updatedTarget && settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
+    if (updatedTarget) {
       try {
         await saveAndNotifyJob(
-          settings.googleSheetUrl,
+          settings.googleSheetUrl || '',
           updatedTarget,
           'status_update',
           {
             targetId: settings.lineTargetGroupId || settings.lineTargetUserId,
+            channelAccessToken: settings.lineChannelAccessToken,
             companyName: settings.companyName,
+            sendLine: true,
           }
         );
       } catch (err) {

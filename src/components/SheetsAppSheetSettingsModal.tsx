@@ -17,6 +17,10 @@ import {
   AlertCircle,
   MessageSquare,
   ShieldCheck,
+  GitBranch,
+  Play,
+  Terminal,
+  HelpCircle,
 } from 'lucide-react';
 import { JobItem, SyncSettings } from '../types';
 import {
@@ -24,6 +28,7 @@ import {
   generateGoogleAppsScriptCode,
   fetchJobsFromGoogleSheets,
   saveJobToGoogleSheets,
+  testSystemConnection,
 } from '../utils/sheetsSync';
 
 interface SheetsAppSheetSettingsModalProps {
@@ -46,10 +51,12 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
   if (!isOpen) return null;
 
   const [formData, setFormData] = useState<SyncSettings>(settings);
-  const [activeTab, setActiveTab] = useState<'sheet_setup' | 'line_setup' | 'gas_code' | 'csv_export'>('sheet_setup');
+  const [activeTab, setActiveTab] = useState<'sheet_setup' | 'line_setup' | 'gas_code' | 'github_guide' | 'csv_export'>('sheet_setup');
   const [copiedCode, setCopiedCode] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<any>(null);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const appsScriptCode = generateGoogleAppsScriptCode('FieldJobs');
@@ -63,7 +70,8 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateSettings(formData);
-    onClose();
+    setStatusMessage({ text: 'บันทึกการตั้งค่าเรียบร้อยแล้ว', type: 'success' });
+    setTimeout(() => onClose(), 800);
   };
 
   // ดึงข้อมูลทั้งหมดจาก Google Sheets มาแสดงในแอป
@@ -116,6 +124,30 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
     } else {
       setStatusMessage({
         text: result.message,
+        type: 'error',
+      });
+    }
+  };
+
+  // ทดสอบระบบส่ง LINE Flex & Sheet Sync
+  const handleRunDiagnostics = async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    setStatusMessage(null);
+
+    const result = await testSystemConnection(formData);
+    setIsTesting(false);
+    setTestResult(result.diagnostics);
+
+    if (result.diagnostics?.lineTest?.success) {
+      setStatusMessage({
+        text: '✅ ส่ง LINE Flex Message เข้ากลุ่มสำเร็จ! ตรวจสอบในกลุ่ม LINE ของคุณได้เลย',
+        type: 'success',
+      });
+    } else {
+      const err = result.diagnostics?.lineTest?.error || result.diagnostics?.error || 'เกิดข้อผิดพลาด';
+      setStatusMessage({
+        text: `⚠️ LINE API แจ้งเตือน: ${err} (อย่าลืมเชิญ LINE Bot เข้ากลุ่ม)`,
         type: 'error',
       });
     }
@@ -186,6 +218,17 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
               <span>โค้ด Apps Script พร้อมใช้</span>
             </button>
             <button
+              onClick={() => setActiveTab('github_guide')}
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+                activeTab === 'github_guide'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <GitBranch className="w-3.5 h-3.5" />
+              <span>วิธีอัพเดตขึ้น GitHub</span>
+            </button>
+            <button
               onClick={() => setActiveTab('csv_export')}
               className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
                 activeTab === 'csv_export'
@@ -212,7 +255,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
               ) : (
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               )}
-              <span>{statusMessage.text}</span>
+              <span className="leading-relaxed">{statusMessage.text}</span>
             </div>
           )}
 
@@ -243,7 +286,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                   <p className="text-[11px] text-slate-500 mt-1">
-                    * ได้จากการกด Deploy ➔ New deployment ➔ Web app ใน Google Apps Script
+                    * ได้จากการกด Deploy ➔ New deployment ➔ Web app ใน Google Apps Script (เลือก Who has access: <strong>Anyone</strong>)
                   </p>
                 </div>
 
@@ -340,9 +383,41 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
                   </div>
                 </div>
 
-                <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-amber-900 text-[11px]">
-                  ⚠️ <strong>ข้อควรจำ:</strong> อย่าลืมเชิญ LINE Bot (Official Account) ของคุณเข้ากลุ่ม LINE <code>{formData.lineTargetGroupId || 'C341417...'}</code> เพื่อให้บอทมีสิทธิ์ส่งข้อความในกลุ่ม
+                {/* Important Checklist Callout */}
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px] space-y-1.5">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>เช็คลิสต์สำคัญ เพื่อให้ LINE Flex ส่งเข้ากลุ่มได้สำเร็จ 100%:</span>
+                  </div>
+                  <ul className="list-disc pl-5 space-y-1 text-amber-800">
+                    <li>
+                      <strong>เชิญบอทเข้ากลุ่ม:</strong> ต้องดึง LINE Official Account (Bot) เข้ากลุ่ม LINE <code>{formData.lineTargetGroupId || 'C341417...'}</code> ด้วย บอทจึงจะส่งข้อความเข้ากลุ่มได้
+                    </li>
+                    <li>
+                      <strong>ปิดฟีเจอร์ Auto-Response:</strong> ใน LINE Official Account Manager ให้ตั้งค่าเป็น Webhook / Messaging API
+                    </li>
+                  </ul>
                 </div>
+
+                {/* Test Diagnostics Button */}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleRunDiagnostics}
+                    disabled={isTesting}
+                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98"
+                  >
+                    <Play className={`w-4 h-4 ${isTesting ? 'animate-spin' : ''}`} />
+                    <span>{isTesting ? 'กำลังทดสอบยิง LINE Flex...' : '🧪 ทดสอบยิง LINE Flex Message เข้ากลุ่มเดี๋ยวนี้'}</span>
+                  </button>
+                </div>
+
+                {testResult && (
+                  <div className="p-3 bg-slate-900 text-slate-100 rounded-xl text-[11px] font-mono overflow-x-auto space-y-1">
+                    <p className="text-emerald-400 font-bold">ผลการทดสอบการเชื่อมต่อ (Diagnostics):</p>
+                    <pre>{JSON.stringify(testResult, null, 2)}</pre>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -350,9 +425,19 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
           {/* Tab 3: Apps Script Code */}
           {activeTab === 'gas_code' && (
             <div className="space-y-3">
+              <div className="p-3 bg-sky-50 border border-sky-200 rounded-xl text-sky-900 text-xs space-y-1">
+                <p className="font-bold">📋 วิธีอัพเดตโค้ดใน Google Apps Script (สำคัญมาก!):</p>
+                <ol className="list-decimal pl-5 space-y-0.5 text-[11px] text-sky-800">
+                  <li>เปิด Google Sheet ของคุณ ➔ กดเมนู <strong>ส่วนขยาย (Extensions)</strong> ➔ <strong>Apps Script</strong></li>
+                  <li>ลบโค้ดเดิมทั้งหมดออก แล้ววางโค้ดด้านล่างนี้ลงไปแทน</li>
+                  <li>กด <strong>บันทึก (รูปแผ่นดิสก์)</strong></li>
+                  <li>กด <strong>ทำให้ใช้งานได้ (Deploy)</strong> ➔ <strong>จัดการการทำให้ใช้งานได้ (Manage deployments)</strong> ➔ กดรูปดินสอ ➔ เลือกเวอร์ชันเป็น <strong>"เวอร์ชันใหม่ (New version)"</strong> ➔ กด Deploy</li>
+                </ol>
+              </div>
+
               <div className="flex items-center justify-between">
-                <p className="text-xs text-slate-600">
-                  โค้ดนี้รองรับทั้ง <strong>บันทึกตาราง Google Sheet</strong> และ <strong>ส่ง LINE Flex Message เข้ากลุ่มอัตโนมัติ</strong>:
+                <p className="text-xs text-slate-600 font-semibold">
+                  โค้ด Google Apps Script (ซิงค์ตาราง + ยิง LINE Flex อัตโนมัติ):
                 </p>
                 <button
                   onClick={handleCopyCode}
@@ -378,7 +463,52 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
             </div>
           )}
 
-          {/* Tab 4: CSV Export */}
+          {/* Tab 4: GitHub Update Guide */}
+          {activeTab === 'github_guide' && (
+            <div className="space-y-4 text-xs">
+              <div className="p-3.5 bg-slate-900 text-white rounded-xl space-y-2">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                  <GitBranch className="w-4 h-4" />
+                  <span>ขั้นตอนการอัพเดต Code ขึ้น GitHub</span>
+                </div>
+                <p className="text-slate-300 text-[11px]">
+                  เมื่อมีการเขียนโค้ดใหม่หรือปรับปรุงระบบ คุณสามารถนำโค้ดขึ้น GitHub ได้ง่ายๆ ผ่าน 2 วิธีดังนี้:
+                </p>
+              </div>
+
+              {/* Method 1: Export / Download ZIP */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <h4 className="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5 text-emerald-700">
+                  <span>วิธีที่ 1: ส่งออกเป็น ZIP หรือ Export GitHub ผ่านเมนู AI Studio (ง่ายที่สุด)</span>
+                </h4>
+                <ol className="list-decimal pl-5 space-y-1 text-slate-600 text-[11px]">
+                  <li>กดที่เมนู <strong>Settings / จุดสามจุด</strong> ที่มุมขวาบนของหน้าต่าง AI Studio</li>
+                  <li>เลือก <strong>"Export to GitHub"</strong> หรือ <strong>"Download ZIP"</strong></li>
+                  <li>หากเชื่อมต่อ GitHub ไว้ ระบบจะ Push โค้ดล่าสุดไปยัง Repository ของคุณโดยตรงทันที</li>
+                </ol>
+              </div>
+
+              {/* Method 2: Git Command Line */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <h4 className="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5 text-slate-900">
+                  <Terminal className="w-4 h-4 text-slate-700" />
+                  <span>วิธีที่ 2: ใช้คำสั่ง Git Command Line (สำหรับเครื่องคอมพิวเตอร์)</span>
+                </h4>
+                <div className="bg-slate-900 text-slate-100 p-3 rounded-xl font-mono text-[11px] space-y-1.5">
+                  <p className="text-slate-400"># 1. ตรวจสอบไฟล์ที่เปลี่ยนแปลง</p>
+                  <p className="text-emerald-400">git status</p>
+                  <p className="text-slate-400"># 2. เพิ่มไฟล์ทั้งหมดเตรียม commit</p>
+                  <p className="text-emerald-400">git add .</p>
+                  <p className="text-slate-400"># 3. บันทึกข้อความอธิบายการอัพเดต</p>
+                  <p className="text-emerald-400">git commit -m "Update LINE Flex notifications and Google Sheets sync"</p>
+                  <p className="text-slate-400"># 4. ส่งโค้ดขึ้น GitHub (main หรือ master branch)</p>
+                  <p className="text-emerald-400">git push origin main</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 5: CSV Export */}
           {activeTab === 'csv_export' && (
             <div className="space-y-4 text-xs">
               <div className="p-6 bg-slate-50 border border-slate-200 rounded-2xl text-center space-y-3">
@@ -411,7 +541,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
           <button
             type="button"
             onClick={handleSaveSettings}
-            className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
           >
             <Save className="w-4 h-4" />
             <span>บันทึกการตั้งค่า</span>
