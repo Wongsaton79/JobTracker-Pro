@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Save,
@@ -38,42 +38,56 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
   editingJob,
   settings,
 }) => {
-  if (!isOpen) return null;
-
-  const now = new Date();
-  const defaultDate = now.toISOString().split('T')[0];
-  const defaultTime = `${now.getHours().toString().padStart(2, '0')}:${now
-    .getMinutes()
-    .toString()
-    .padStart(2, '0')}`;
-
-  const [formData, setFormData] = useState<Partial<JobItem>>(
-    editingJob || {
-      jobCode: `JOB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      title: '',
-      contactPerson: '',
-      phoneNumber: '',
-      date: defaultDate,
-      time: defaultTime,
-      status: 'pending',
-      location: {
-        address: 'กรุงเทพมหานคร และปริมณฑล',
-        lat: 13.7563,
-        lng: 100.5018,
-      },
-      photos: [],
-      productBrand: 'SCG / COTTO',
-      productDetails: '',
-      price: 0,
-      paymentType: 'cash',
-      notes: '',
-      assignedTo: '',
-    }
-  );
-
+  const [formData, setFormData] = useState<Partial<JobItem>>({});
   const [customBrand, setCustomBrand] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const now = new Date();
+      const defaultDate = now.toISOString().split('T')[0];
+      const defaultTime = `${now.getHours().toString().padStart(2, '0')}:${now
+        .getMinutes()
+        .toString()
+        .padStart(2, '0')}`;
+
+      if (editingJob) {
+        setFormData(editingJob);
+        if (editingJob.productBrand && !POPULAR_BRANDS.includes(editingJob.productBrand)) {
+          setCustomBrand(editingJob.productBrand);
+        } else {
+          setCustomBrand('');
+        }
+      } else {
+        setFormData({
+          jobCode: `JOB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+          title: '',
+          contactPerson: '',
+          phoneNumber: '',
+          date: defaultDate,
+          time: defaultTime,
+          status: 'pending',
+          location: {
+            address: 'กรุงเทพมหานคร และปริมณฑล',
+            lat: 13.7563,
+            lng: 100.5018,
+          },
+          photos: [],
+          productBrand: 'SCG / COTTO',
+          productDetails: '',
+          price: 0,
+          paymentType: 'cash',
+          notes: '',
+          assignedTo: '',
+        });
+        setCustomBrand('');
+      }
+      setErrors({});
+    }
+  }, [isOpen, editingJob]);
+
+  if (!isOpen) return null;
 
   // Status options
   const statusList: Array<{ value: JobStatus; label: string }> = [

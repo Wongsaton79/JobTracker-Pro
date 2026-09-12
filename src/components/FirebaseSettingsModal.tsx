@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Database,
@@ -51,10 +51,18 @@ export const FirebaseSettingsModal: React.FC<FirebaseSettingsModalProps> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const [isTestingLine, setIsTestingLine] = useState(false);
+  const [isTestingBot, setIsTestingBot] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{
     text: string;
     type: 'success' | 'error' | 'info';
   } | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(settings);
+      setStatusMessage(null);
+    }
+  }, [isOpen, settings]);
 
   if (!isOpen) return null;
 
@@ -111,9 +119,6 @@ export const FirebaseSettingsModal: React.FC<FirebaseSettingsModalProps> = ({
       setIsFetching(false);
     }
   };
-
-  // Test LINE Bot Connection (Quick Ping)
-  const [isTestingBot, setIsTestingBot] = useState(false);
 
   const handleTestLineBot = async () => {
     setIsTestingBot(true);

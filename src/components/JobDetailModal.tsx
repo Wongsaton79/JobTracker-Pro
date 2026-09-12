@@ -42,9 +42,10 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
   onSendLinePreview,
   onDirectSendLine,
 }) => {
+  const [selectedPhoto, setSelectedPhoto] = useState<JobPhoto | null>(null);
+
   if (!job) return null;
 
-  const [selectedPhoto, setSelectedPhoto] = useState<JobPhoto | null>(null);
   const statusCfg = getStatusConfig(job.status);
   const paymentCfg = getPaymentTypeConfig(job.paymentType);
   const googleMapsUrl = `https://www.google.com/maps?q=${job.location.lat},${job.location.lng}`;
