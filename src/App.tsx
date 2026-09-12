@@ -36,6 +36,15 @@ export default function App() {
         if (!parsed.googleSheetUrl || parsed.googleSheetUrl.includes('docs.google.com/spreadsheets/d/1Example')) {
           parsed.googleSheetUrl = DEFAULT_APPS_SCRIPT_URL;
         }
+        if (!parsed.lineChannelAccessToken) {
+          parsed.lineChannelAccessToken = INITIAL_SETTINGS.lineChannelAccessToken;
+        }
+        if (!parsed.lineTargetUserId) {
+          parsed.lineTargetUserId = INITIAL_SETTINGS.lineTargetUserId;
+        }
+        if (!parsed.lineTargetGroupId) {
+          parsed.lineTargetGroupId = INITIAL_SETTINGS.lineTargetGroupId;
+        }
         return parsed;
       }
     } catch (e) {

@@ -14,10 +14,15 @@ import {
   DollarSign,
   User,
   Calendar,
+  Users,
+  CheckCircle2,
+  AlertCircle,
+  ShieldCheck,
 } from 'lucide-react';
 import { JobItem, SyncSettings } from '../types';
 import { buildLineFlexMessage, generateLineNotifyText } from '../utils/lineFlexBuilder';
 import { formatCurrency, formatThaiDate, getPaymentTypeConfig, getStatusConfig } from '../utils/formatters';
+import { sendLineFlexViaAppsScript } from '../utils/sheetsSync';
 
 interface LineFlexSimulatorProps {
   job: JobItem | null;
@@ -35,7 +40,8 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
   const currentJob = job || (allJobs.length > 0 ? allJobs[0] : null);
   const [activeTab, setActiveTab] = useState<'flex_preview' | 'json_code' | 'notify_text'>('flex_preview');
   const [copied, setCopied] = useState(false);
-  const [testSent, setTestSent] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [sendResult, setSendResult] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   if (!currentJob) {
     return (
@@ -58,9 +64,72 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleTestSend = () => {
-    setTestSent(true);
-    setTimeout(() => setTestSent(false), 3000);
+  const handleSendToGroup = async () => {
+    const targetId = settings.lineTargetGroupId || 'C341417bcb6e853c320eaf9d80963cda3';
+    if (!settings.googleSheetUrl) {
+      setSendResult({
+        text: 'กรุณาตั้งค่า Google Sheets Web App URL ก่อนเพื่อเป็นช่องทางส่ง LINE Message',
+        type: 'error',
+      });
+      return;
+    }
+
+    setIsSending(true);
+    setSendResult(null);
+
+    const res = await sendLineFlexViaAppsScript(
+      settings.googleSheetUrl,
+      currentJob,
+      targetId,
+      settings.companyName
+    );
+
+    setIsSending(false);
+    if (res.success) {
+      setSendResult({
+        text: `✅ ส่ง LINE Flex Message เข้ากลุ่ม (${targetId.substring(0, 8)}...) สำเร็จเรียบร้อย!`,
+        type: 'success',
+      });
+    } else {
+      setSendResult({
+        text: res.message,
+        type: 'error',
+      });
+    }
+  };
+
+  const handleSendToUser = async () => {
+    const targetId = settings.lineTargetUserId || 'U54fd541a6cf7746b1b4f0219634c7a53';
+    if (!settings.googleSheetUrl) {
+      setSendResult({
+        text: 'กรุณาตั้งค่า Google Sheets Web App URL ก่อนเพื่อเป็นช่องทางส่ง LINE Message',
+        type: 'error',
+      });
+      return;
+    }
+
+    setIsSending(true);
+    setSendResult(null);
+
+    const res = await sendLineFlexViaAppsScript(
+      settings.googleSheetUrl,
+      currentJob,
+      targetId,
+      settings.companyName
+    );
+
+    setIsSending(false);
+    if (res.success) {
+      setSendResult({
+        text: `✅ ส่ง LINE Flex Message เข้า LINE ส่วนตัว (${targetId.substring(0, 8)}...) สำเร็จ!`,
+        type: 'success',
+      });
+    } else {
+      setSendResult({
+        text: res.message,
+        type: 'error',
+      });
+    }
   };
 
   return (
@@ -68,12 +137,20 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
       {/* Header & Job Selector */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
-            <span className="text-emerald-500 font-bold">LINE</span>
-            <span>Flex Message Notification Center</span>
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full bg-[#06C755]/10 text-[#06C755] font-bold text-xs border border-[#06C755]/20 flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Messaging API Connected</span>
+            </span>
+            <span className="text-xs text-slate-500 font-mono hidden md:inline">
+              Group: {settings.lineTargetGroupId ? `${settings.lineTargetGroupId.substring(0, 10)}...` : 'C341417b...'}
+            </span>
+          </div>
+          <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2 mt-1">
+            <span>LINE Flex Message Notification Center</span>
           </h2>
           <p className="text-xs text-slate-500">
-            ตัวอย่างการแจ้งเตือนรูปแบบ Flex Message สวยงาม อ่านง่ายบนมือถือ พร้อมโค้ด JSON สำหรับเชื่อมต่อ AppSheet / Google Apps Script
+            ระบบส่งการ์ดรายงานหน้างานเข้ากลุ่ม LINE อัตโนมัติ พร้อมปุ่มเปิด GPS แผนที่และโทรออก
           </p>
         </div>
 
@@ -115,15 +192,15 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
             {/* LINE App Bar */}
             <div className="bg-[#1E232B] text-white px-3.5 py-2.5 rounded-t-2xl flex items-center justify-between border-b border-white/10">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-[#06C755] flex items-center justify-center font-bold text-xs shadow-xs">
+                <div className="w-7 h-7 rounded-full bg-[#06C755] flex items-center justify-center font-bold text-xs shadow-xs text-white">
                   💬
                 </div>
                 <div>
                   <div className="text-xs font-bold leading-tight flex items-center gap-1">
-                    <span>LINE Notify / Field Alert</span>
+                    <span>กลุ่มช่าง & หน้างาน</span>
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   </div>
-                  <div className="text-[10px] text-slate-400">การแจ้งเตือนงานอัตโนมัติ</div>
+                  <div className="text-[10px] text-slate-400">LINE Flex Notification</div>
                 </div>
               </div>
               <BellRing className="w-4 h-4 text-emerald-400" />
@@ -134,7 +211,7 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
               {/* Chat timestamp */}
               <div className="text-center">
                 <span className="text-[10px] bg-black/20 text-white/90 px-2.5 py-0.5 rounded-full backdrop-blur-xs">
-                  วันนี้ 14:30 น.
+                  วันนี้ {currentJob.time} น.
                 </span>
               </div>
 
@@ -264,9 +341,68 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Code Generator, AppSheet Integration & Actions */}
+        {/* Right Column: Dispatch Actions, Code Generator & API Info */}
         <div className="lg:col-span-6 xl:col-span-7 space-y-4">
-          {/* Action Tabs */}
+          {/* Send Status Banner */}
+          {sendResult && (
+            <div
+              className={`p-3.5 rounded-xl border text-xs flex items-center gap-2 ${
+                sendResult.type === 'success'
+                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                  : 'bg-rose-50 text-rose-900 border-rose-300'
+              }`}
+            >
+              {sendResult.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              )}
+              <span>{sendResult.text}</span>
+            </div>
+          )}
+
+          {/* Quick Push Actions Card */}
+          <div className="bg-gradient-to-br from-emerald-900 via-teal-900 to-slate-900 text-white p-5 rounded-2xl shadow-lg border border-emerald-800/50 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm sm:text-base font-bold flex items-center gap-2">
+                <span>🚀 สั่งส่งการ์ด Flex Message เข้า LINE ทันที</span>
+              </h3>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full">
+                Active
+              </span>
+            </div>
+
+            <p className="text-xs text-emerald-100/90 leading-relaxed">
+              คลิกปุ่มด้านล่างเพื่อส่งการ์ดสรุปงาน <strong>"{currentJob.title}"</strong> เข้ากลุ่ม LINE หรือ ผู้ใช้เป้าหมายทันที:
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              <button
+                onClick={handleSendToGroup}
+                disabled={isSending}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-[#06C755] hover:bg-[#05b34c] text-white rounded-xl font-bold shadow-md transition-all active:scale-95 text-xs"
+              >
+                <Users className="w-4 h-4" />
+                <span>{isSending ? 'กำลังส่ง...' : '💬 ส่งเข้ากลุ่ม LINE (Group)'}</span>
+              </button>
+
+              <button
+                onClick={handleSendToUser}
+                disabled={isSending}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold shadow-md transition-all active:scale-95 text-xs border border-white/20"
+              >
+                <User className="w-4 h-4" />
+                <span>{isSending ? 'กำลังส่ง...' : '👤 ส่งเข้า LINE ส่วนตัว (User)'}</span>
+              </button>
+            </div>
+
+            <div className="text-[10px] text-emerald-200/80 pt-1 border-t border-emerald-800/60 flex flex-wrap items-center justify-between gap-1">
+              <span>Group ID: {settings.lineTargetGroupId || 'C341417bcb6e853c320eaf9d80963cda3'}</span>
+              <span>User ID: {settings.lineTargetUserId || 'U54fd541a6cf7746b1b4f0219634c7a53'}</span>
+            </div>
+          </div>
+
+          {/* Action Tabs Card */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex gap-2 text-xs font-semibold">
@@ -278,7 +414,7 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  📱 สรุปฟังก์ชัน Flex
+                  📱 สรุปการเชื่อมต่อ
                 </button>
                 <button
                   onClick={() => setActiveTab('json_code')}
@@ -289,7 +425,7 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
                   }`}
                 >
                   <Code2 className="w-3.5 h-3.5" />
-                  <span>JSON Payload (AppSheet / LINE API)</span>
+                  <span>Flex Message JSON</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('notify_text')}
@@ -299,7 +435,7 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  💬 LINE Notify Text
+                  💬 ข้อความตัวอักษร
                 </button>
               </div>
 
@@ -330,28 +466,14 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
             {/* Tab Contents */}
             {activeTab === 'flex_preview' && (
               <div className="space-y-3 text-xs text-slate-600">
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-                  <h4 className="font-bold text-emerald-900 flex items-center gap-1.5 text-sm mb-1">
-                    <Sparkles className="w-4 h-4 text-emerald-600" />
-                    <span>จุดเด่นของระบบแจ้งเตือน LINE Flex Message:</span>
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <h4 className="font-bold text-slate-800 text-xs">
+                    💡 ข้อแนะนำสำหรับการส่งเข้ากลุ่ม LINE:
                   </h4>
-                  <ul className="list-disc list-inside space-y-1 text-emerald-800">
-                    <li>สี Header ปรับเปลี่ยนอัตโนมัติตามสถานะงาน (เขียว=เสร็จ, ฟ้า=กำลังทำ, ส้ม=รอตรวจ, แดง=มีปัญหา)</li>
-                    <li>แสดงภาพหน้างานจริงแบบไฮเรสทันทีที่ช่างถ่ายรูป</li>
-                    <li>มีปุ่มกด <strong>"แผนที่ GPS"</strong> เพื่อเปิด Google Maps นำทางได้ทันทีจากมือถือ</li>
-                    <li>มีปุ่มกด <strong>"โทรออก"</strong> เพื่อโทรหาลูกค้าหรือโฟร์แมนได้ใน 1 คลิก</li>
-                    <li>สรุปราคางาน แบรนด์สินค้า และสถานะการชำระเงิน (สด/เครดิต) ชัดเจน</li>
+                  <ul className="list-disc list-inside space-y-1 text-slate-600 text-[11px]">
+                    <li><strong>อย่าลืมเชิญบอทเข้ากลุ่ม:</strong> ดึงบัญชี LINE Official Account (บอทที่คุณสร้าง) เข้าไปอยู่ในกลุ่ม <code>{settings.lineTargetGroupId}</code> ด้วย เพื่อให้บอทมีสิทธิ์ส่งข้อความในกลุ่ม</li>
+                    <li><strong>ซิงค์อัตโนมัติ:</strong> เมื่อคุณบันทึกงานใหม่ หรือเปลี่ยนสถานะงานในเว็บ ข้อมูลจะถูกบันทึกลง Google Sheets และส่ง Flex Message แจ้งเตือนเข้ากลุ่มทันที</li>
                   </ul>
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                  <button
-                    onClick={handleTestSend}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-[#06C755] hover:bg-[#05b34c] text-white rounded-xl font-bold shadow-md transition-all active:scale-95 text-xs sm:text-sm"
-                  >
-                    <Send className="w-4 h-4" />
-                    <span>{testSent ? '✅ ส่งข้อความทดสอบสำเร็จ!' : 'ทดสอบส่งการแจ้งเตือน (Test Dispatch)'}</span>
-                  </button>
                 </div>
               </div>
             )}
@@ -359,7 +481,7 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
             {activeTab === 'json_code' && (
               <div className="space-y-2">
                 <p className="text-xs text-slate-500">
-                  นำ JSON นี้ไปใส่ใน <strong>AppSheet Automation (Webhook Call)</strong> หรือ <strong>LINE Messaging API POST /v2/bot/message/push</strong>
+                  โครงสร้าง LINE Flex Message Bubble JSON มาตรฐาน:
                 </p>
                 <div className="relative bg-slate-900 text-slate-100 rounded-xl p-4 font-mono text-[11px] max-h-96 overflow-y-auto">
                   <pre>{JSON.stringify(flexPayload, null, 2)}</pre>
@@ -370,26 +492,13 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
             {activeTab === 'notify_text' && (
               <div className="space-y-2">
                 <p className="text-xs text-slate-500">
-                  ข้อความสำหรับส่งผ่าน <strong>LINE Notify Token</strong> ทั่วไป
+                  ข้อความสรุปงานแบบ Plain Text:
                 </p>
                 <div className="bg-slate-50 text-slate-800 rounded-xl p-4 font-mono text-xs border border-slate-200 whitespace-pre-wrap">
                   {notifyText}
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Guide for AppSheet / Google Apps Script */}
-          <div className="bg-sky-50/70 p-4 rounded-2xl border border-sky-200 text-xs text-sky-950 space-y-2">
-            <h4 className="font-bold text-sky-900 flex items-center gap-1.5">
-              <span>🚀 วิธีตั้งค่า Automation ใน AppSheet / Google Sheets:</span>
-            </h4>
-            <ol className="list-decimal list-inside space-y-1 text-sky-900">
-              <li>สร้าง Table <strong>Jobs</strong> ใน AppSheet โดยดึงฐานข้อมูลจาก Google Sheet</li>
-              <li>ไปที่เมนู <strong>Automation → Tasks</strong> ใน AppSheet</li>
-              <li>เลือก Action Type เป็น <strong>Webhook</strong> ไปยัง LINE Messaging API หรือ Webhook URL</li>
-              <li>วาง Body ด้วยรูปแบบ Flex Message JSON ข้างต้น</li>
-            </ol>
           </div>
         </div>
       </div>

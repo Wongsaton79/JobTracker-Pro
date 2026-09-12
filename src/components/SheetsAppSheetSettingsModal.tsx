@@ -15,6 +15,8 @@ import {
   Save,
   CheckCircle2,
   AlertCircle,
+  MessageSquare,
+  ShieldCheck,
 } from 'lucide-react';
 import { JobItem, SyncSettings } from '../types';
 import {
@@ -44,7 +46,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
   if (!isOpen) return null;
 
   const [formData, setFormData] = useState<SyncSettings>(settings);
-  const [activeTab, setActiveTab] = useState<'sheet_setup' | 'gas_code' | 'csv_export'>('sheet_setup');
+  const [activeTab, setActiveTab] = useState<'sheet_setup' | 'line_setup' | 'gas_code' | 'csv_export'>('sheet_setup');
   const [copiedCode, setCopiedCode] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
@@ -130,10 +132,10 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold">
-                การเชื่อมต่อฐานข้อมูล Google Sheets
+                การเชื่อมต่อฐานข้อมูล Google Sheets & LINE
               </h2>
               <p className="text-xs text-emerald-100">
-                ใช้ Google Sheets เป็นฐานข้อมูลกลาง บันทึกและดึงข้อมูลมาแสดงผลได้ทุกที่ ทุกอุปกรณ์
+                ระบบคลาวด์จัดเก็บข้อมูลงาน และส่งการแจ้งเตือน LINE Flex Message เข้ากลุ่มช่างอัตโนมัติ
               </p>
             </div>
           </div>
@@ -149,7 +151,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
         {/* Modal Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
           {/* Tabs */}
-          <div className="flex gap-2 border-b border-slate-200 pb-2 text-xs font-semibold">
+          <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2 text-xs font-semibold">
             <button
               onClick={() => setActiveTab('sheet_setup')}
               className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
@@ -159,7 +161,18 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
               }`}
             >
               <Database className="w-3.5 h-3.5" />
-              <span>ตั้งค่า Google Sheets URL</span>
+              <span>Google Sheets URL</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('line_setup')}
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+                activeTab === 'line_setup'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>LINE Messaging API</span>
             </button>
             <button
               onClick={() => setActiveTab('gas_code')}
@@ -181,7 +194,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
               }`}
             >
               <Download className="w-3.5 h-3.5" />
-              <span>ส่งออกไฟล์ CSV</span>
+              <span>ส่งออก CSV</span>
             </button>
           </div>
 
@@ -269,26 +282,77 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
                   </button>
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* Quick 3-Step Guide */}
-              <div className="p-3.5 bg-slate-100/80 rounded-xl border border-slate-200 text-slate-700 space-y-1.5 text-[11px]">
-                <div className="font-bold text-slate-800">📌 ขั้นตอนการเอา URL จาก Google Sheets:</div>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>เปิด Google Sheet ของคุณ ➔ เมนู <strong>Extensions (ส่วนขยาย)</strong> ➔ <strong>Apps Script</strong></li>
-                  <li>คัดลอกโค้ดจากแท็บ <strong>"โค้ด Apps Script พร้อมใช้"</strong> ไปวางแล้วกด Save</li>
-                  <li>กดปุ่ม <strong>Deploy</strong> ➔ <strong>New deployment</strong> ➔ เลือก <strong>Web app</strong> ➔ ตรงช่อง Who has access ให้เลือก <strong>Anyone</strong></li>
-                  <li>คัดลอก Web App URL ที่ได้มาใส่ในช่องด้านบนนี้</li>
-                </ol>
+          {/* Tab 2: LINE Messaging API Credentials */}
+          {activeTab === 'line_setup' && (
+            <div className="space-y-4 text-xs">
+              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
+                <div className="flex items-center gap-1.5 text-emerald-900 font-bold">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>การเชื่อมต่อ LINE Messaging API (Flex Message)</span>
+                </div>
+                <p className="text-emerald-800 text-[11px]">
+                  ข้อมูลด้านล่างนี้ถูกบันทึกไว้ในระบบเพื่อใช้ส่งการ์ดสรุปงานเข้ากลุ่ม LINE (Group ID) หรือส่งเข้าบัญชีส่วนตัว (User ID)
+                </p>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                <div>
+                  <label className="block text-slate-800 font-bold mb-1">
+                    Channel Access Token (Long-lived):
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={formData.lineChannelAccessToken || ''}
+                    onChange={(e) => setFormData({ ...formData, lineChannelAccessToken: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-[11px] font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    placeholder="JOdpOQkd0rtaYfPfGVLwZj9LMshtp010Hgb..."
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-800 font-bold mb-1">
+                      LINE Group ID (ส่งเข้ากลุ่ม):
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.lineTargetGroupId || ''}
+                      onChange={(e) => setFormData({ ...formData, lineTargetGroupId: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                      placeholder="C341417bcb6e853c320eaf9d80963cda3"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-800 font-bold mb-1">
+                      LINE User ID (ส่งเข้าส่วนตัว):
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.lineTargetUserId || ''}
+                      onChange={(e) => setFormData({ ...formData, lineTargetUserId: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                      placeholder="U54fd541a6cf7746b1b4f0219634c7a53"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-amber-900 text-[11px]">
+                  ⚠️ <strong>ข้อควรจำ:</strong> อย่าลืมเชิญ LINE Bot (Official Account) ของคุณเข้ากลุ่ม LINE <code>{formData.lineTargetGroupId || 'C341417...'}</code> เพื่อให้บอทมีสิทธิ์ส่งข้อความในกลุ่ม
+                </div>
               </div>
             </div>
           )}
 
-          {/* Tab 2: Apps Script Code */}
+          {/* Tab 3: Apps Script Code */}
           {activeTab === 'gas_code' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-slate-600">
-                  โค้ดนี้รองรับทั้งการ <strong>ดึงข้อมูล (doGet)</strong> และ <strong>บันทึกข้อมูล (doPost)</strong> อัตโนมัติ:
+                  โค้ดนี้รองรับทั้ง <strong>บันทึกตาราง Google Sheet</strong> และ <strong>ส่ง LINE Flex Message เข้ากลุ่มอัตโนมัติ</strong>:
                 </p>
                 <button
                   onClick={handleCopyCode}
@@ -314,7 +378,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
             </div>
           )}
 
-          {/* Tab 3: CSV Export */}
+          {/* Tab 4: CSV Export */}
           {activeTab === 'csv_export' && (
             <div className="space-y-4 text-xs">
               <div className="p-6 bg-slate-50 border border-slate-200 rounded-2xl text-center space-y-3">

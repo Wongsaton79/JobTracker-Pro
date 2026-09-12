@@ -46,6 +46,7 @@ export interface SyncSettings {
   lineNotifyToken?: string;
   lineChannelAccessToken?: string;
   lineTargetUserId?: string;
+  lineTargetGroupId?: string;
   autoSyncSheets: boolean;
   autoSendLineFlex: boolean;
   companyName: string;

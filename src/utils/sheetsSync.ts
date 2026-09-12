@@ -1,5 +1,6 @@
 import { JobItem, SyncSettings } from '../types';
 import { formatThaiDate } from './formatters';
+import { buildLineFlexMessage } from './lineFlexBuilder';
 
 export const exportJobsToCsv = (jobs: JobItem[]): string => {
   const headers = [
@@ -72,10 +73,15 @@ export const downloadCsvFile = (jobs: JobItem[], filename = 'field_jobs_data.csv
 
 export const generateGoogleAppsScriptCode = (sheetName = 'FieldJobs') => {
   return `// ==========================================================
-// 🚀 Google Apps Script for JobTracker Pro (Google Sheets Database)
+// 🚀 Google Apps Script for JobTracker Pro (Google Sheets Database + LINE Flex Message)
 // วางโค้ดนี้ใน Google Sheet -> Extensions (ส่วนขยาย) -> Apps Script
 // หลังจากวางแล้วให้กด Deploy -> New deployment -> Web app -> Who has access: Anyone
 // ==========================================================
+
+// 🔑 การตั้งค่า LINE Messaging API
+var LINE_CHANNEL_ACCESS_TOKEN = "JOdpOQkd0rtaYfPfGVLwZj9LMshtp010Hgb5DsM9HmRmtDWqrSJFTVjXLd6mLmhS3bCmWfTIKeHkC3yhWVMGXKP/R7HhnWEizWvqnxi8EWa/jMVUKxz1mck/P+8/LvTaHJl/Fpq0P7Okf547iIlW2wdB04t89/1O/w1cDnyilFU=";
+var LINE_TARGET_GROUP_ID = "C341417bcb6e853c320eaf9d80963cda3"; // กลุ่ม LINE
+var LINE_TARGET_USER_ID = "U54fd541a6cf7746b1b4f0219634c7a53";   // ผู้ใช้ LINE
 
 function doGet(e) {
   try {
@@ -88,12 +94,10 @@ function doGet(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
     
-    var headers = data[0];
     var jobs = [];
-    
     for (var i = 1; i < data.length; i++) {
       var row = data[i];
-      if (!row[0]) continue; // ข้ามแถวที่ไม่มีรหัสงาน
+      if (!row[0]) continue;
       
       var photoUrls = row[16] ? String(row[16]).split(' | ').filter(Boolean) : [];
       var photos = photoUrls.map(function(u, idx) {
@@ -181,6 +185,14 @@ function doPost(e) {
     }
 
     var data = JSON.parse(payloadStr);
+
+    // กรณีสั่งส่งเฉพาะ LINE Flex Message
+    if (data && data.action === 'send_line') {
+      var target = data.targetId || LINE_TARGET_GROUP_ID || LINE_TARGET_USER_ID;
+      var lineResult = pushLineFlex(target, data.job, data.companyName);
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", lineResult: lineResult }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     
     // หากเป็นการส่งข้อมูลก้อนใหญ่ (Sync ทั้งหมด)
     if (Array.isArray(data)) {
@@ -190,9 +202,17 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "success", count: data.length }))
         .setMimeType(ContentService.MimeType.JSON);
     } 
-    // หากเป็นการส่งทีละงาน (Real-time Save)
+    // หากเป็นการส่งทีละงาน (Real-time Save & Auto Push LINE)
     else if (data && (data.jobCode || data.title)) {
       appendOrUpdateJob(sheet, data);
+      
+      // ส่ง LINE Flex เข้ากลุ่มโดยอัตโนมัติ
+      try {
+        pushLineFlex(LINE_TARGET_GROUP_ID || LINE_TARGET_USER_ID, data, "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด");
+      } catch (errLine) {
+        Logger.log("LINE push err: " + errLine);
+      }
+      
       return ContentService.createTextOutput(JSON.stringify({ status: "success", jobCode: data.jobCode }))
         .setMimeType(ContentService.MimeType.JSON);
     }
@@ -247,6 +267,173 @@ function appendOrUpdateJob(sheet, job) {
     sheet.appendRow(rowData);
   }
 }
+
+// 💬 ฟังก์ชันส่ง LINE Flex Message เข้า Group หรือ User
+function pushLineFlex(targetId, job, companyName) {
+  if (!LINE_CHANNEL_ACCESS_TOKEN || !targetId) {
+    return { error: "Missing LINE Token or Target ID" };
+  }
+
+  var statusColors = {
+    'completed': '#059669',
+    'in_progress': '#0284C7',
+    'review': '#D97706',
+    'pending': '#475569',
+    'issue': '#E11D48'
+  };
+
+  var statusLabels = {
+    'completed': 'เสร็จสมบูรณ์ 100%',
+    'in_progress': 'กำลังดำเนินการ',
+    'review': 'รอตรวจรับมอบงาน',
+    'pending': 'รอดำเนินการ',
+    'issue': 'มีปัญหา/ต้องแก้ไข'
+  };
+
+  var status = (job.status || 'pending').toLowerCase();
+  var color = statusColors[status] || '#0284C7';
+  var label = statusLabels[status] || 'อัพเดทงาน';
+
+  var heroImage = (job.photos && job.photos.length > 0 && job.photos[0].url && job.photos[0].url.startsWith('http'))
+    ? job.photos[0].url
+    : 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80';
+
+  var mapUrl = job.location ? ('https://www.google.com/maps?q=' + job.location.lat + ',' + job.location.lng) : 'https://maps.google.com';
+  var phoneUri = 'tel:' + String(job.phoneNumber || '').replace(/[^0-9]/g, '');
+
+  var flexBubble = {
+    "type": "bubble",
+    "size": "mega",
+    "header": {
+      "type": "box",
+      "layout": "vertical",
+      "backgroundColor": color,
+      "paddingAll": "16px",
+      "contents": [
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            { "type": "text", "text": "🔔 อัพเดทสถานะงานหน้างาน", "weight": "bold", "color": "#FFFFFF", "size": "sm", "flex": 1 },
+            { "type": "text", "text": label, "weight": "bold", "color": "#FFFFFF", "size": "xs", "align": "end" }
+          ]
+        },
+        { "type": "text", "text": String(job.title || "งานหน้างาน"), "weight": "bold", "color": "#FFFFFF", "size": "lg", "wrap": true, "margin": "md" },
+        { "type": "text", "text": "รหัสงาน: " + (job.jobCode || "-") + " • " + (job.date || "") + " " + (job.time || ""), "color": "#E0E7FF", "size": "xs", "margin": "xs" }
+      ]
+    },
+    "hero": {
+      "type": "image",
+      "url": heroImage,
+      "size": "full",
+      "aspectRatio": "20:13",
+      "aspectMode": "cover",
+      "action": { "type": "uri", "label": "ดูรูปภาพ", "uri": heroImage }
+    },
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "paddingAll": "18px",
+      "spacing": "md",
+      "contents": [
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            { "type": "text", "text": "👤 ผู้ติดต่อ", "size": "xs", "color": "#64748B", "flex": 3 },
+            { "type": "text", "text": (job.contactPerson || "-") + " (" + (job.phoneNumber || "-") + ")", "size": "xs", "color": "#1E293B", "weight": "bold", "flex": 7, "wrap": true }
+          ]
+        },
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            { "type": "text", "text": "🏷️ แบรนด์/สินค้า", "size": "xs", "color": "#64748B", "flex": 3 },
+            { "type": "text", "text": (job.productBrand || "-") + " - " + (job.productDetails || "-"), "size": "xs", "color": "#1E293B", "weight": "bold", "flex": 7, "wrap": true }
+          ]
+        },
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            { "type": "text", "text": "💰 ยอดเงิน & ชำระ", "size": "xs", "color": "#64748B", "flex": 3 },
+            { "type": "text", "text": "฿" + Number(job.price || 0).toLocaleString() + " (" + (job.paymentType || "เงินสด") + ")", "size": "xs", "color": "#059669", "weight": "bold", "flex": 7 }
+          ]
+        },
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            { "type": "text", "text": "📍 พิกัดหน้างาน", "size": "xs", "color": "#64748B", "flex": 3 },
+            { "type": "text", "text": (job.location && job.location.address) || "พิกัด GPS", "size": "xs", "color": "#0284C7", "flex": 7, "wrap": true }
+          ]
+        }
+      ]
+    },
+    "footer": {
+      "type": "box",
+      "layout": "vertical",
+      "spacing": "sm",
+      "paddingAll": "14px",
+      "contents": [
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "spacing": "sm",
+          "contents": [
+            { "type": "button", "style": "primary", "color": "#0284C7", "height": "sm", "action": { "type": "uri", "label": "🗺️ แผนที่ GPS", "uri": mapUrl } },
+            { "type": "button", "style": "secondary", "height": "sm", "action": { "type": "uri", "label": "📞 โทรออก", "uri": phoneUri } }
+          ]
+        },
+        { "type": "text", "text": "ระบบรายงานโดย " + (companyName || "JobTracker Pro"), "size": "xxs", "color": "#94A3B8", "align": "center", "margin": "xs" }
+      ]
+    }
+  };
+
+  var payload = {
+    "to": targetId,
+    "messages": [
+      {
+        "type": "flex",
+        "altText": "[" + label + "] " + (job.title || "งานหน้างาน"),
+        "contents": flexBubble
+      }
+    ]
+  };
+
+  var options = {
+    "method": "post",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + LINE_CHANNEL_ACCESS_TOKEN
+    },
+    "payload": JSON.stringify(payload),
+    "muteHttpExceptions": true
+  };
+
+  var response = UrlFetchApp.fetch("https://api.line.me/v2/bot/message/push", options);
+  return response.getContentText();
+}
+
+// 🧪 ทดสอบส่ง Flex เข้า Group ได้ทันทีในหน้า Apps Script
+function testLinePushToGroup() {
+  var sampleJob = {
+    jobCode: "JOB-2026-TEST",
+    title: "ทดสอบการส่งการ์ด LINE Flex เข้ากลุ่ม",
+    status: "in_progress",
+    contactPerson: "คุณสมชาย",
+    phoneNumber: "081-234-5678",
+    productBrand: "SCG",
+    productDetails: "งานติดตั้งสมาร์ทบอร์ด",
+    price: 15500,
+    paymentType: "เงินสด",
+    location: { address: "กรุงเทพมหานคร", lat: 13.7563, lng: 100.5018 },
+    date: "2026-09-12",
+    time: "10:30"
+  };
+  var result = pushLineFlex(LINE_TARGET_GROUP_ID, sampleJob, "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด");
+  Logger.log("Result: " + result);
+}
 `;
 };
 
@@ -300,7 +487,6 @@ export const saveJobToGoogleSheets = async (
   }
 
   try {
-    // ใช้ application/x-www-form-urlencoded หรือ raw text payload เพื่อป้องกัน CORS preflight
     await fetch(webAppUrl, {
       method: 'POST',
       mode: 'no-cors',
@@ -312,12 +498,52 @@ export const saveJobToGoogleSheets = async (
 
     return {
       success: true,
-      message: 'ส่งข้อมูลไปยัง Google Sheets สำเร็จเรียบร้อย',
+      message: 'ส่งข้อมูลไปยัง Google Sheets และแจ้งเตือน LINE สำเร็จ',
     };
   } catch (err: any) {
     return {
       success: false,
       message: `บันทึกลง Google Sheets ไม่สำเร็จ: ${err.message || err}`,
+    };
+  }
+};
+
+/**
+ * ส่ง LINE Flex Message ผ่าน Google Apps Script Web App
+ */
+export const sendLineFlexViaAppsScript = async (
+  webAppUrl: string,
+  job: JobItem,
+  targetId: string,
+  companyName: string
+): Promise<{ success: boolean; message: string }> => {
+  if (!webAppUrl || !webAppUrl.startsWith('http')) {
+    return { success: false, message: 'กรุณาระบุ URL Google Apps Script ให้ถูกต้อง' };
+  }
+
+  try {
+    await fetch(webAppUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify({
+        action: 'send_line',
+        targetId: targetId,
+        job: job,
+        companyName: companyName,
+      }),
+    });
+
+    return {
+      success: true,
+      message: 'ส่งการ์ด LINE Flex Message สำเร็จเรียบร้อย!',
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `ส่ง LINE Flex ไม่สำเร็จ: ${err.message || err}`,
     };
   }
 };

@@ -5,8 +5,9 @@ export const INITIAL_SETTINGS: SyncSettings = {
   googleSheetUrl: 'https://script.google.com/macros/s/AKfycbzZGiyeLCwTUxLFG0NTrU2GFhz2kvmyS1BQaYqHil-jDpcnNwPtu1U8LPZtGmJypEHZ/exec',
   appSheetWebhookUrl: '',
   lineNotifyToken: '',
-  lineChannelAccessToken: '',
-  lineTargetUserId: '',
+  lineChannelAccessToken: 'JOdpOQkd0rtaYfPfGVLwZj9LMshtp010Hgb5DsM9HmRmtDWqrSJFTVjXLd6mLmhS3bCmWfTIKeHkC3yhWVMGXKP/R7HhnWEizWvqnxi8EWa/jMVUKxz1mck/P+8/LvTaHJl/Fpq0P7Okf547iIlW2wdB04t89/1O/w1cDnyilFU=',
+  lineTargetUserId: 'U54fd541a6cf7746b1b4f0219634c7a53',
+  lineTargetGroupId: 'C341417bcb6e853c320eaf9d80963cda3',
   autoSyncSheets: true,
   autoSendLineFlex: true,
 };
