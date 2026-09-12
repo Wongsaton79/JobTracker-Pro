@@ -125,3 +125,28 @@ export const getPaymentTypeConfig = (type: PaymentType) => {
       };
   }
 };
+
+export const getJobTimestamp = (job: { updatedAt?: string; createdAt?: string; date?: string; time?: string }): number => {
+  if (job.updatedAt) {
+    const t = new Date(job.updatedAt).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  if (job.createdAt) {
+    const t = new Date(job.createdAt).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  if (job.date) {
+    const timeStr = job.time || '00:00';
+    const combined = `${job.date}T${timeStr.length === 5 ? timeStr : '00:00'}`;
+    const t = new Date(combined).getTime();
+    if (!isNaN(t) && t > 0) return t;
+    const dateOnly = new Date(job.date).getTime();
+    if (!isNaN(dateOnly) && dateOnly > 0) return dateOnly;
+  }
+  return 0;
+};
+
+export const sortJobsLatestFirst = <T extends { updatedAt?: string; createdAt?: string; date?: string; time?: string }>(jobsList: T[]): T[] => {
+  return [...jobsList].sort((a, b) => getJobTimestamp(b) - getJobTimestamp(a));
+};
+

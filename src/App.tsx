@@ -15,7 +15,8 @@ import {
   fetchJobsFromGoogleSheets,
   saveAndNotifyJob,
 } from './utils/sheetsSync';
-import { CheckCircle2, AlertCircle, Sparkles, Smartphone, Tablet, Monitor, RefreshCw } from 'lucide-react';
+import { sortJobsLatestFirst } from './utils/formatters';
+import { CheckCircle2, AlertCircle, Sparkles, Smartphone, Tablet, Monitor, RefreshCw, Radio } from 'lucide-react';
 
 export default function App() {
   // Load saved jobs from localStorage or fallback to initial data
@@ -23,12 +24,12 @@ export default function App() {
     try {
       const saved = localStorage.getItem('field_jobs_data');
       if (saved) {
-        return JSON.parse(saved);
+        return sortJobsLatestFirst(JSON.parse(saved));
       }
     } catch (e) {
       console.warn('Failed to parse localStorage jobs:', e);
     }
-    return INITIAL_JOBS;
+    return sortJobsLatestFirst(INITIAL_JOBS);
   });
 
   // Load saved settings from localStorage
@@ -68,6 +69,7 @@ export default function App() {
   const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
   const [linePreviewJob, setLinePreviewJob] = useState<JobItem | null>(null);
   const [isQuickSyncing, setIsQuickSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   // Toast notifications
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -97,6 +99,61 @@ export default function App() {
     }, 3500);
   };
 
+  // 🔄 Automatic sync from Google Sheets (on mount + periodic + focus)
+  const syncFromSheetsQuietly = async (isManual = false) => {
+    if (!settings.googleSheetUrl || !settings.googleSheetUrl.startsWith('http')) return;
+    if (isManual) setIsQuickSyncing(true);
+
+    try {
+      const result = await fetchJobsFromGoogleSheets(settings.googleSheetUrl);
+      if (result.success && result.data && result.data.length > 0) {
+        setJobs(sortJobsLatestFirst(result.data));
+        setLastSyncedAt(new Date());
+        if (isManual) {
+          showToast(`ดึงข้อมูลจาก Google Sheets สำเร็จ (${result.data.length} งาน ล่าสุดขึ้นบน)`, 'success');
+        }
+      } else if (isManual) {
+        showToast(result.message || 'ไม่สามารถดึงข้อมูลได้', 'error');
+      }
+    } catch (err: any) {
+      if (isManual) {
+        showToast(`เกิดข้อผิดพลาด: ${err.message || err}`, 'error');
+      }
+    } finally {
+      if (isManual) setIsQuickSyncing(false);
+    }
+  };
+
+  // Initial auto-fetch on mount & whenever URL changes
+  useEffect(() => {
+    if (settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
+      syncFromSheetsQuietly(false);
+    }
+  }, [settings.googleSheetUrl]);
+
+  // Background interval auto-sync every 25 seconds + tab focus trigger
+  useEffect(() => {
+    const interval = setInterval(() => {
+      syncFromSheetsQuietly(false);
+    }, 25000);
+
+    const handleFocus = () => {
+      syncFromSheetsQuietly(false);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        syncFromSheetsQuietly(false);
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [settings.googleSheetUrl]);
+
   // 1. ฟังก์ชันกดส่งเอง (Direct Manual Send LINE Flex Message เข้า Group)
   const handleDirectSendLineFlex = async (job: JobItem, customHeader?: string) => {
     showToast(`กำลังส่ง LINE Flex สำหรับ "${job.title}" เข้ากลุ่ม...`, 'info');
@@ -124,10 +181,10 @@ export default function App() {
     const isEdit = jobs.some((j) => j.id === savedJob.id);
 
     if (isEdit) {
-      setJobs((prev) => prev.map((j) => (j.id === savedJob.id ? savedJob : j)));
+      setJobs((prev) => sortJobsLatestFirst(prev.map((j) => (j.id === savedJob.id ? savedJob : j))));
       showToast(`อัพเดทงาน "${savedJob.title}" เรียบร้อย`, 'success');
     } else {
-      setJobs((prev) => [savedJob, ...prev]);
+      setJobs((prev) => sortJobsLatestFirst([savedJob, ...prev]));
       showToast(`🆕 บันทึกงานใหม่ "${savedJob.title}" สำเร็จ! ส่งแจ้งเตือน LINE แล้ว`, 'success');
     }
     setEditingJob(null);
@@ -145,6 +202,7 @@ export default function App() {
           sendLine: true,
         }
       );
+      setLastSyncedAt(new Date());
     } catch (err) {
       console.warn('Auto sync & notify failed:', err);
     }
@@ -154,8 +212,8 @@ export default function App() {
   // บันทึกสถานะใหม่ลง Google Sheet ทันที + ส่ง LINE Flex แจ้งเตือนเข้ากลุ่ม
   const handleQuickStatusChange = async (id: string, newStatus: JobStatus) => {
     let updatedTarget: JobItem | null = null;
-    setJobs((prev) =>
-      prev.map((j) => {
+    setJobs((prev) => {
+      const updatedList = prev.map((j) => {
         if (j.id === id) {
           const updated = {
             ...j,
@@ -167,8 +225,9 @@ export default function App() {
           return updated;
         }
         return j;
-      })
-    );
+      });
+      return sortJobsLatestFirst(updatedList);
+    });
 
     // Update viewing modal state if currently open
     if (viewingJob && viewingJob.id === id) {
@@ -190,6 +249,7 @@ export default function App() {
             sendLine: true,
           }
         );
+        setLastSyncedAt(new Date());
       } catch (err) {
         console.warn('Quick status sync failed:', err);
       }
@@ -206,29 +266,20 @@ export default function App() {
     if (settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
       try {
         await saveJobToGoogleSheets(settings.googleSheetUrl, updatedJobs);
+        setLastSyncedAt(new Date());
       } catch (err) {
         console.warn('Delete sync to sheets failed:', err);
       }
     }
   };
 
-  // Quick fetch all from Google Sheets
-  const handleQuickFetchFromSheets = async () => {
+  // Quick fetch all from Google Sheets (Manual Trigger)
+  const handleQuickFetchFromSheets = () => {
     if (!settings.googleSheetUrl || !settings.googleSheetUrl.startsWith('http')) {
       setIsSheetsModalOpen(true);
       return;
     }
-
-    setIsQuickSyncing(true);
-    const result = await fetchJobsFromGoogleSheets(settings.googleSheetUrl);
-    setIsQuickSyncing(false);
-
-    if (result.success && result.data && result.data.length > 0) {
-      setJobs(result.data);
-      showToast(`ดึงข้อมูลจาก Google Sheets สำเร็จ (${result.data.length} งาน)`, 'success');
-    } else {
-      showToast(result.message || 'ไม่สามารถดึงข้อมูลได้', 'error');
-    }
+    syncFromSheetsQuietly(true);
   };
 
   // Open LINE Flex Preview
@@ -260,23 +311,34 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 space-y-4">
-        {/* Quick Sync Banner if Google Sheets URL is set */}
+        {/* Real-time Auto-Sync Status Bar */}
         {settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http') && (
-          <div className="bg-emerald-900/90 text-white px-4 py-2.5 rounded-2xl shadow-xs flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-              <span className="font-medium">
-                เชื่อมต่อฐานข้อมูล Google Sheets เรียบร้อยแล้ว (ระบบบันทึกและซิงค์ข้อมูลอัตโนมัติ)
+          <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs border border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
               </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-emerald-400">ระบบดึงและซิงค์ Google Sheets อัตโนมัติ (เรียงงานล่าสุดขึ้นบน)</span>
+                {lastSyncedAt && (
+                  <span className="text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md text-[11px]">
+                    ซิงค์ล่าสุด: {lastSyncedAt.toLocaleTimeString('th-TH')}
+                  </span>
+                )}
+              </div>
             </div>
-            <button
-              onClick={handleQuickFetchFromSheets}
-              disabled={isQuickSyncing}
-              className="flex items-center gap-1.5 px-3 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg font-bold transition-all"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isQuickSyncing ? 'animate-spin' : ''}`} />
-              <span>{isQuickSyncing ? 'กำลังดึงข้อมูล...' : 'ดึงข้อมูลล่าสุดจาก Sheet'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleQuickFetchFromSheets}
+                disabled={isQuickSyncing}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 rounded-lg font-medium transition-all cursor-pointer border border-slate-700"
+                title="คลิกเพื่อรีเฟรชข้อมูลทันที"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isQuickSyncing ? 'animate-spin' : ''}`} />
+                <span>{isQuickSyncing ? 'กำลังดึงข้อมูล...' : 'รีเฟรชข้อมูล'}</span>
+              </button>
+            </div>
           </div>
         )}
 

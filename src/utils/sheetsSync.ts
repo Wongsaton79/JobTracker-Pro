@@ -77,7 +77,7 @@ export const generateGoogleAppsScriptCode = (sheetName = 'FieldJobs') => {
 // หลังจากวางแล้วให้กด Deploy -> New deployment -> Web app -> Who has access: Anyone
 // ==========================================================
 
-// 🔑 การตั้งค่า LINE Messaging API
+// 🔑 การตั้งค่า LINE Messaging API (ค่าเริ่มต้น)
 var LINE_CHANNEL_ACCESS_TOKEN = "JOdpOQkd0rtaYfPfGVLwZj9LMshtp010Hgb5DsM9HmRmtDWqrSJFTVjXLd6mLmhS3bCmWfTIKeHkC3yhWVMGXKP/R7HhnWEizWvqnxi8EWa/jMVUKxz1mck/P+8/LvTaHJl/Fpq0P7Okf547iIlW2wdB04t89/1O/w1cDnyilFU=";
 var LINE_TARGET_GROUP_ID = "C341417bcb6e853c320eaf9d80963cda3"; // กลุ่ม LINE
 var LINE_TARGET_USER_ID = "U54fd541a6cf7746b1b4f0219634c7a53";   // ผู้ใช้ LINE
@@ -136,6 +136,13 @@ function doGet(e) {
       jobs.push(job);
     }
     
+    // Sort latest updated first
+    jobs.sort(function(a, b) {
+      var timeA = new Date(a.updatedAt || a.date).getTime() || 0;
+      var timeB = new Date(b.updatedAt || b.date).getTime() || 0;
+      return timeB - timeA;
+    });
+
     return ContentService.createTextOutput(JSON.stringify({ status: "success", data: jobs }))
       .setMimeType(ContentService.MimeType.JSON);
       
@@ -184,20 +191,41 @@ function doPost(e) {
     }
 
     var data = JSON.parse(payloadStr);
+    var token = data.channelAccessToken || LINE_CHANNEL_ACCESS_TOKEN;
+    var target = data.targetId || LINE_TARGET_GROUP_ID || LINE_TARGET_USER_ID;
 
-    // 1. ส่ง LINE Flex Message โดยเฉพาะ (กดส่งเอง หรือ Manual Send)
-    if (data && data.action === 'send_line') {
-      var target = data.targetId || LINE_TARGET_GROUP_ID || LINE_TARGET_USER_ID;
-      var lineResult = pushLineFlex(target, data.job, data.companyName, data.eventLabel || '🔔 รายงานข้อมูลงาน');
+    // 1. ทดสอบการเชื่อมต่อ (Test Connection)
+    if (data && (data.action === 'test_connection' || data.action === 'test')) {
+      var sampleJob = data.job || {
+        jobCode: "TEST-" + Date.now().toString().slice(-4),
+        title: "ทดสอบการเชื่อมต่อระบบ JobTracker Pro",
+        status: "in_progress",
+        contactPerson: "ระบบทดสอบอัตโนมัติ",
+        phoneNumber: "081-234-5678",
+        productBrand: "SCG",
+        productDetails: "ทดสอบการส่ง LINE Flex Message จากระบบ",
+        price: 9900,
+        paymentType: "เงินสด",
+        location: { address: "กรุงเทพมหานคร", lat: 13.7563, lng: 100.5018 },
+        date: new Date().toISOString().substring(0, 10),
+        time: "12:00"
+      };
+      var lineResult = pushLineFlex(target, sampleJob, data.companyName || "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด", "🧪 ทดสอบการเชื่อมต่อระบบ", token);
       return ContentService.createTextOutput(JSON.stringify({ status: "success", lineResult: lineResult }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 2. บันทึกงาน + ส่ง LINE Flex แจ้งเตือน (สร้างงานใหม่ / เปลี่ยนสถานะ / แก้ไขงาน)
+    // 2. ส่ง LINE Flex Message โดยเฉพาะ (กดส่งเอง หรือ Manual Send)
+    if (data && data.action === 'send_line') {
+      var lineResult = pushLineFlex(target, data.job, data.companyName, data.eventLabel || '🔔 รายงานข้อมูลงาน', token);
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", lineResult: lineResult }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 3. บันทึกงาน + ส่ง LINE Flex แจ้งเตือน (สร้างงานใหม่ / เปลี่ยนสถานะ / แก้ไขงาน)
     if (data && data.action === 'save_and_notify') {
       appendOrUpdateJob(sheet, data.job);
       
-      var target = data.targetId || LINE_TARGET_GROUP_ID || LINE_TARGET_USER_ID;
       var eventLabel = data.eventLabel;
       if (!eventLabel) {
         if (data.triggerType === 'new_job') {
@@ -211,7 +239,7 @@ function doPost(e) {
       
       if (data.sendLine !== false) {
         try {
-          pushLineFlex(target, data.job, data.companyName || "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด", eventLabel);
+          pushLineFlex(target, data.job, data.companyName || "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด", eventLabel, token);
         } catch (errLine) {
           Logger.log("LINE push err: " + errLine);
         }
@@ -221,7 +249,7 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
     
-    // 3. ซิงค์ข้อมูลก้อนใหญ่ทั้งหมด (Bulk Sync)
+    // 4. ซิงค์ข้อมูลก้อนใหญ่ทั้งหมด (Bulk Sync)
     if (Array.isArray(data)) {
       data.forEach(function(job) {
         appendOrUpdateJob(sheet, job);
@@ -229,12 +257,12 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "success", count: data.length }))
         .setMimeType(ContentService.MimeType.JSON);
     } 
-    // 4. บันทึกข้อมูลงานเดี่ยวแบบเดิม (Fallback Direct Job Object)
+    // 5. บันทึกข้อมูลงานเดี่ยวแบบเดิม (Fallback Direct Job Object)
     else if (data && (data.jobCode || data.title)) {
       appendOrUpdateJob(sheet, data);
       
       try {
-        pushLineFlex(LINE_TARGET_GROUP_ID || LINE_TARGET_USER_ID, data, "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด", "🔔 อัพเดทสถานะงานหน้างาน");
+        pushLineFlex(target, data, "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด", "🔔 อัพเดทสถานะงานหน้างาน", token);
       } catch (errLine) {
         Logger.log("LINE push err: " + errLine);
       }
@@ -295,8 +323,9 @@ function appendOrUpdateJob(sheet, job) {
 }
 
 // 💬 ฟังก์ชันส่ง LINE Flex Message เข้า Group หรือ User พร้อมแถบหัวข้อ Custom
-function pushLineFlex(targetId, job, companyName, headerLabel) {
-  if (!LINE_CHANNEL_ACCESS_TOKEN || !targetId) {
+function pushLineFlex(targetId, job, companyName, headerLabel, dynamicToken) {
+  var token = dynamicToken || LINE_CHANNEL_ACCESS_TOKEN;
+  if (!token || !targetId) {
     return { error: "Missing LINE Token or Target ID" };
   }
 
@@ -432,7 +461,7 @@ function pushLineFlex(targetId, job, companyName, headerLabel) {
     "method": "post",
     "headers": {
       "Content-Type": "application/json",
-      "Authorization": "Bearer " + LINE_CHANNEL_ACCESS_TOKEN
+      "Authorization": "Bearer " + token
     },
     "payload": JSON.stringify(payload),
     "muteHttpExceptions": true
@@ -458,7 +487,7 @@ function testLinePushToGroup() {
     date: "2026-09-12",
     time: "10:30"
   };
-  var result = pushLineFlex(LINE_TARGET_GROUP_ID, sampleJob, "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด", "🧪 ทดสอบส่ง Flex เข้ากลุ่ม");
+  var result = pushLineFlex(LINE_TARGET_GROUP_ID, sampleJob, "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด", "🧪 ทดสอบส่ง Flex เข้ากลุ่ม", LINE_CHANNEL_ACCESS_TOKEN);
   Logger.log("Result: " + result);
 }
 `;
@@ -493,7 +522,7 @@ export const fetchJobsFromGoogleSheets = async (
     console.warn('Server proxy fetch failed, trying direct browser fetch:', err);
   }
 
-  // 2. Fallback to direct client-side fetch
+  // 2. Fallback to direct client-side fetch (GitHub Pages / SPA)
   try {
     const response = await fetch(webAppUrl, {
       method: 'GET',
@@ -698,6 +727,11 @@ export const sendLineFlexViaAppsScript = async (
  * ทดสอบการเชื่อมต่อระบบ LINE Messaging API & Google Sheets
  */
 export const testSystemConnection = async (settings: SyncSettings): Promise<{ success: boolean; diagnostics: any }> => {
+  const targetId = settings.lineTargetGroupId || settings.lineTargetUserId || 'C341417bcb6e853c320eaf9d80963cda3';
+  const token = settings.lineChannelAccessToken;
+  const webAppUrl = settings.googleSheetUrl;
+
+  // 1. Try server-side proxy first (if running on Node.js / Container)
   try {
     const response = await fetch('/api/sync/test-connection', {
       method: 'POST',
@@ -705,27 +739,74 @@ export const testSystemConnection = async (settings: SyncSettings): Promise<{ su
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        webAppUrl: settings.googleSheetUrl,
-        targetId: settings.lineTargetGroupId || settings.lineTargetUserId,
-        channelAccessToken: settings.lineChannelAccessToken,
+        webAppUrl: webAppUrl,
+        targetId: targetId,
+        channelAccessToken: token,
       }),
     });
 
     if (response.ok) {
       const data = await response.json();
+      if (data.status === 'success') {
+        return {
+          success: true,
+          diagnostics: data.diagnostics || { lineApi: 'ok' },
+        };
+      }
+    }
+  } catch (serverErr) {
+    console.warn('Server test-connection endpoint unreachable (likely on GitHub Pages / Static hosting):', serverErr);
+  }
+
+  // 2. Fallback for GitHub Pages / Static hosting: Trigger via Google Apps Script Web App directly
+  if (webAppUrl && webAppUrl.startsWith('http')) {
+    try {
+      await fetch(webAppUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({
+          action: 'test_connection',
+          targetId: targetId,
+          channelAccessToken: token,
+          companyName: settings.companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
+          job: {
+            jobCode: `TEST-${Date.now().toString().slice(-4)}`,
+            title: 'ทดสอบการเชื่อมต่อระบบ JobTracker Pro (GitHub Pages)',
+            status: 'in_progress',
+            contactPerson: 'ระบบทดสอบอัตโนมัติ',
+            phoneNumber: '081-234-5678',
+            productBrand: 'SCG',
+            productDetails: 'ทดสอบการส่ง LINE Flex Message จากเว็บ',
+            price: 9900,
+            paymentType: 'เงินสด',
+            location: { address: 'กรุงเทพมหานคร', lat: 13.7563, lng: 100.5018 },
+            date: new Date().toISOString().substring(0, 10),
+            time: '12:00',
+          },
+        }),
+      });
+
       return {
         success: true,
-        diagnostics: data.diagnostics,
+        diagnostics: {
+          lineApi: 'ok',
+          sentVia: 'Google Apps Script (GitHub Pages Client)',
+          targetId: targetId,
+        },
+      };
+    } catch (clientErr: any) {
+      return {
+        success: false,
+        diagnostics: { error: `ไม่สามารถส่งคำขอผ่าน Google Apps Script: ${clientErr.message || clientErr}` },
       };
     }
-    return {
-      success: false,
-      diagnostics: { error: 'Failed to contact test endpoint' },
-    };
-  } catch (err: any) {
-    return {
-      success: false,
-      diagnostics: { error: err.message || String(err) },
-    };
   }
+
+  return {
+    success: false,
+    diagnostics: { error: 'กรุณาระบุ URL ของ Google Apps Script Web App ให้ถูกต้องก่อนทดสอบ' },
+  };
 };

@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { JobItem, JobStatus, PaymentType } from '../types';
 import { JobCard } from './JobCard';
-import { formatCurrency, formatThaiDate, getPaymentTypeConfig, getStatusConfig } from '../utils/formatters';
+import { formatCurrency, formatThaiDate, getPaymentTypeConfig, getStatusConfig, getJobTimestamp } from '../utils/formatters';
 import { POPULAR_BRANDS } from '../data/initialData';
 
 interface JobListViewProps {
@@ -96,10 +96,10 @@ export const JobListView: React.FC<JobListViewProps> = ({
       })
       .sort((a, b) => {
         if (sortBy === 'date_desc') {
-          return new Date(`${b.date}T${b.time || '00:00'}`).getTime() - new Date(`${a.date}T${a.time || '00:00'}`).getTime();
+          return getJobTimestamp(b) - getJobTimestamp(a);
         }
         if (sortBy === 'date_asc') {
-          return new Date(`${a.date}T${a.time || '00:00'}`).getTime() - new Date(`${b.date}T${b.time || '00:00'}`).getTime();
+          return getJobTimestamp(a) - getJobTimestamp(b);
         }
         if (sortBy === 'price_desc') {
           return b.price - a.price;
