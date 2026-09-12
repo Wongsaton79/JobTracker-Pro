@@ -1,5 +1,6 @@
 import { JobItem, JobStatus, SyncSettings } from '../types';
 import { formatThaiDate } from './formatters';
+import { ensureJobPhotosPublicUrls } from './imageCdn';
 
 export const exportJobsToCsv = (jobs: JobItem[]): string => {
   const headers = [
@@ -256,6 +257,22 @@ function doPost(e) {
 
     // 2. ส่ง LINE Flex Message โดยเฉพาะ (กดส่งเอง หรือ Manual Send)
     if (data && data.action === 'send_line') {
+      if (data.job && data.job.photos && Array.isArray(data.job.photos)) {
+        for (var p = 0; p < data.job.photos.length; p++) {
+          var pObj = data.job.photos[p];
+          var rawPUrl = (pObj && pObj.url) ? pObj.url : (typeof pObj === 'string' ? pObj : '');
+          if (rawPUrl && rawPUrl.indexOf('data:image/') === 0) {
+            var savedDUrl = saveBase64ImageToDrive(rawPUrl, (data.job.jobCode || 'job') + '_photo_' + (p + 1) + '.jpg');
+            if (savedDUrl) {
+              if (typeof data.job.photos[p] === 'object') {
+                data.job.photos[p].url = savedDUrl;
+              } else {
+                data.job.photos[p] = savedDUrl;
+              }
+            }
+          }
+        }
+      }
       var lineResult = pushLineFlex(target, data.job, data.companyName, data.eventLabel || '🔔 รายงานข้อมูลงาน', token);
       return ContentService.createTextOutput(JSON.stringify({ status: "success", lineResult: lineResult }))
         .setMimeType(ContentService.MimeType.JSON);
@@ -450,9 +467,25 @@ function pushLineFlex(targetId, job, companyName, headerLabel, dynamicToken) {
   var statusBadge = statusLabels[status] || 'อัพเดทงาน';
   var topHeader = headerLabel || '🔔 อัพเดทสถานะงานหน้างาน';
 
-  var heroImage = (job.photos && job.photos.length > 0 && job.photos[0].url && job.photos[0].url.startsWith('http'))
-    ? job.photos[0].url
-    : 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80';
+  var heroImage = '';
+  if (job.photos && Array.isArray(job.photos) && job.photos.length > 0) {
+    for (var i = 0; i < job.photos.length; i++) {
+      var photoItem = job.photos[i];
+      var rawPhotoUrl = (photoItem && photoItem.url) ? photoItem.url : (typeof photoItem === 'string' ? photoItem : '');
+      if (rawPhotoUrl) {
+        if (rawPhotoUrl.indexOf('http') === 0) {
+          heroImage = rawPhotoUrl;
+          break;
+        } else if (rawPhotoUrl.indexOf('data:image/') === 0) {
+          var savedDrive = saveBase64ImageToDrive(rawPhotoUrl, (job.jobCode || 'job') + '_photo_' + (i + 1) + '.jpg');
+          if (savedDrive) {
+            heroImage = savedDrive;
+            break;
+          }
+        }
+      }
+    }
+  }
 
   var mapUrl = job.location ? ('https://www.google.com/maps?q=' + job.location.lat + ',' + job.location.lng) : 'https://maps.google.com';
   var phoneUri = 'tel:' + String(job.phoneNumber || '').replace(/[^0-9]/g, '');
@@ -477,14 +510,6 @@ function pushLineFlex(targetId, job, companyName, headerLabel, dynamicToken) {
         { "type": "text", "text": String(job.title || "งานหน้างาน"), "weight": "bold", "color": "#FFFFFF", "size": "lg", "wrap": true, "margin": "md" },
         { "type": "text", "text": "รหัสงาน: " + (job.jobCode || "-") + " • " + (job.date || "") + " " + (job.time || ""), "color": "#E0E7FF", "size": "xs", "margin": "xs" }
       ]
-    },
-    "hero": {
-      "type": "image",
-      "url": heroImage,
-      "size": "full",
-      "aspectRatio": "20:13",
-      "aspectMode": "cover",
-      "action": { "type": "uri", "label": "ดูรูปภาพ", "uri": heroImage }
     },
     "body": {
       "type": "box",
@@ -545,6 +570,17 @@ function pushLineFlex(targetId, job, companyName, headerLabel, dynamicToken) {
       ]
     }
   };
+
+  if (heroImage && heroImage.indexOf('http') === 0) {
+    flexBubble.hero = {
+      "type": "image",
+      "url": heroImage,
+      "size": "full",
+      "aspectRatio": "20:13",
+      "aspectMode": "cover",
+      "action": { "type": "uri", "label": "ดูรูปภาพหน้างาน", "uri": heroImage }
+    };
+  }
 
   var payload = {
     "to": targetId,
@@ -779,9 +815,12 @@ export const saveAndNotifyJob = async (
     }
   }
 
+  // Ensure all photos in job are converted to public HTTPS CDN URLs first
+  const publicJob = await ensureJobPhotosPublicUrls(job);
+
   const payload = {
     webAppUrl,
-    job,
+    job: publicJob,
     triggerType,
     targetId: options?.targetId || 'C341417bcb6e853c320eaf9d80963cda3',
     channelAccessToken: options?.channelAccessToken || 'JOdpOQkd0rtaYfPfGVLwZj9LMshtp010Hgb5DsM9HmRmtDWqrSJFTVjXLd6mLmhS3bCmWfTIKeHkC3yhWVMGXKP/R7HhnWEizWvqnxi8EWa/jMVUKxz1mck/P+8/LvTaHJl/Fpq0P7Okf547iIlW2wdB04t89/1O/w1cDnyilFU=',
@@ -793,7 +832,7 @@ export const saveAndNotifyJob = async (
 
   let serverSuccess = false;
   let serverDetails: any = null;
-  let updatedJob: JobItem = job;
+  let updatedJob: JobItem = publicJob;
 
   // 1. Try server-side proxy first (direct LINE API + Sheets dispatch + Image hosting)
   try {

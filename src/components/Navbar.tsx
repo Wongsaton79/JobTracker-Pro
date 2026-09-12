@@ -17,7 +17,7 @@ interface NavbarProps {
   activeTab: 'jobs' | 'dashboard' | 'map' | 'line_flex';
   onTabChange: (tab: 'jobs' | 'dashboard' | 'map' | 'line_flex') => void;
   onOpenNewJob: () => void;
-  onOpenSheetsSettings: () => void;
+  onOpenSettings: () => void;
   jobs: JobItem[];
   settings: SyncSettings;
 }
@@ -26,13 +26,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   onTabChange,
   onOpenNewJob,
-  onOpenSheetsSettings,
+  onOpenSettings,
   jobs,
   settings,
 }) => {
   const pendingJobsCount = jobs.filter((j) => j.status === 'in_progress' || j.status === 'pending').length;
   const totalRevenue = jobs.reduce((sum, j) => sum + j.price, 0);
-  const isSheetConnected = Boolean(settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http'));
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900 text-white shadow-md border-b border-slate-800 backdrop-blur-md">
@@ -57,7 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 truncate hidden sm:block">
-                ระบบติดตามและอัพเดทสถานะหน้างาน • ฐานข้อมูล Google Sheets & LINE Flex
+                ระบบติดตามและอัพเดทสถานะหน้างาน • ฐานข้อมูล Cloud Firebase Firestore & LINE Flex
               </p>
             </div>
           </div>
@@ -77,24 +76,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
-            {/* Discreet Settings Gear Button (Admin / Integration Settings) */}
+            {/* Discreet Settings Gear Button (Firebase & LINE Settings) */}
             <button
-              onClick={onOpenSheetsSettings}
-              className={`relative w-9 h-9 rounded-xl flex items-center justify-center transition-all border ${
-                isSheetConnected
-                  ? 'bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700 hover:border-slate-600'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border-slate-700'
-              }`}
-              title="ตั้งค่าระบบ (Settings & Database)"
+              onClick={onOpenSettings}
+              className="relative w-9 h-9 rounded-xl flex items-center justify-center transition-all border bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700 hover:border-slate-600"
+              title="ตั้งค่าระบบฐานข้อมูล Firebase & LINE"
               aria-label="ตั้งค่าระบบ"
             >
               <Settings className="w-4 h-4 text-slate-400 hover:text-white transition-transform duration-300 hover:rotate-45" />
-              {isSheetConnected && (
-                <span
-                  className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-slate-900"
-                  title="Google Sheets & LINE Connected"
-                />
-              )}
+              <span
+                className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-slate-900"
+                title="Firebase Firestore Connected"
+              />
             </button>
 
             {/* Quick Add Job Button */}

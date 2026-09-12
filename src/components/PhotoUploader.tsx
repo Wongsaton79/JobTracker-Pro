@@ -1,6 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { Camera, Image as ImageIcon, Trash2, X, RefreshCw, Eye } from 'lucide-react';
 import { JobPhoto } from '../types';
+import { uploadBase64ToPublicCdn } from '../utils/imageCdn';
+
+export const uploadDirectToPublicCdn = uploadBase64ToPublicCdn;
 
 interface PhotoUploaderProps {
   photos: JobPhoto[];
@@ -53,27 +56,6 @@ const compressImage = (fileOrDataUrl: File | string, maxWidth = 1200, quality = 
       reader.readAsDataURL(fileOrDataUrl);
     }
   });
-};
-
-// Helper to upload image to public CDN in background
-const uploadImageToCdn = async (dataUrl: string): Promise<string> => {
-  if (!dataUrl || !dataUrl.startsWith('data:image/')) return dataUrl;
-  try {
-    const res = await fetch('/api/images/upload-cdn', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: dataUrl }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.url) {
-        return data.url;
-      }
-    }
-  } catch (err) {
-    console.warn('Background upload to CDN failed:', err);
-  }
-  return dataUrl;
 };
 
 export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
@@ -181,7 +163,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     stopCamera();
 
     // Background upload to public CDN for instant LINE & Sheets compatibility
-    uploadImageToCdn(compressedUrl).then((cdnUrl) => {
+    uploadDirectToPublicCdn(compressedUrl).then((cdnUrl) => {
       if (cdnUrl && cdnUrl !== compressedUrl) {
         onChange(updatedList.map((p) => (p.id === newPhotoId ? { ...p, url: cdnUrl } : p)));
       }
@@ -228,7 +210,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
 
     // Background CDN upload for all added files
     newlyAdded.forEach(({ id, compressedUrl }) => {
-      uploadImageToCdn(compressedUrl).then((cdnUrl) => {
+      uploadDirectToPublicCdn(compressedUrl).then((cdnUrl) => {
         if (cdnUrl && cdnUrl !== compressedUrl) {
           onChange(newPhotosList.map((p) => (p.id === id ? { ...p, url: cdnUrl } : p)));
         }

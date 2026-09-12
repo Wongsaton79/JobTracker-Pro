@@ -1,6 +1,6 @@
 {
   "name": "JobTracker Pro - ระบบติดตามงานและอัพเดทสถานะหน้างาน",
-  "description": "Web Application ระบบติดตามและอัพเดทสถานะหน้างาน บันทึกพิกัด GPS ภาพถ่าย แบรนด์สินค้า ยอดเงิน รองรับ Google Sheet/AppSheet และแจ้งเตือน LINE Flex Message",
+  "description": "Web Application ระบบติดตามและอัพเดทสถานะหน้างาน บันทึกพิกัด GPS ภาพถ่าย แบรนด์สินค้า ยอดเงิน รองรับ Firebase Cloud Firestore Real-time DB และแจ้งเตือน LINE Flex Message",
   "requestFramePermissions": [
     "geolocation",
     "camera"

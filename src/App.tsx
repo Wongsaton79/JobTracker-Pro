@@ -6,25 +6,28 @@ import { MapView } from './components/MapView';
 import { LineFlexSimulator } from './components/LineFlexSimulator';
 import { JobFormModal } from './components/JobFormModal';
 import { JobDetailModal } from './components/JobDetailModal';
-import { SheetsAppSheetSettingsModal } from './components/SheetsAppSheetSettingsModal';
+import { FirebaseSettingsModal } from './components/FirebaseSettingsModal';
 import { INITIAL_JOBS, INITIAL_SETTINGS } from './data/initialData';
 import { JobItem, JobStatus, SyncSettings } from './types';
-import {
-  downloadCsvFile,
-  saveJobToGoogleSheets,
-  fetchJobsFromGoogleSheets,
-  fetchSharedServerJobs,
-  saveAndNotifyJob,
-} from './utils/sheetsSync';
 import {
   subscribeToFirebaseJobs,
   saveJobToFirebase,
   deleteJobFromFirebase,
   fetchJobsFromFirebaseOnce,
 } from './utils/firebaseSync';
+import { sendLineFlexDirect } from './utils/lineFlexSender';
 import { exportJobsToExcel } from './utils/excelExport';
 import { sortJobsLatestFirst } from './utils/formatters';
-import { CheckCircle2, AlertCircle, Sparkles, Smartphone, Tablet, Monitor, RefreshCw, Radio, Flame, FileSpreadsheet } from 'lucide-react';
+import {
+  CheckCircle2,
+  AlertCircle,
+  Smartphone,
+  Tablet,
+  Monitor,
+  RefreshCw,
+  Flame,
+  FileSpreadsheet,
+} from 'lucide-react';
 
 export default function App() {
   // Load saved jobs from localStorage or fallback to initial data
@@ -42,14 +45,10 @@ export default function App() {
 
   // Load saved settings from localStorage
   const [settings, setSettings] = useState<SyncSettings>(() => {
-    const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzZGiyeLCwTUxLFG0NTrU2GFhz2kvmyS1BQaYqHil-jDpcnNwPtu1U8LPZtGmJypEHZ/exec';
     try {
       const saved = localStorage.getItem('field_tracker_settings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (!parsed.googleSheetUrl || parsed.googleSheetUrl.includes('docs.google.com/spreadsheets/d/1Example')) {
-          parsed.googleSheetUrl = DEFAULT_APPS_SCRIPT_URL;
-        }
         if (!parsed.lineChannelAccessToken) {
           parsed.lineChannelAccessToken = INITIAL_SETTINGS.lineChannelAccessToken;
         }
@@ -74,11 +73,10 @@ export default function App() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<JobItem | null>(null);
   const [viewingJob, setViewingJob] = useState<JobItem | null>(null);
-  const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [linePreviewJob, setLinePreviewJob] = useState<JobItem | null>(null);
   const [isQuickSyncing, setIsQuickSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(new Date());
-  const [firebaseConnected, setFirebaseConnected] = useState(true);
 
   // Toast notifications
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -110,12 +108,11 @@ export default function App() {
 
   // 🔥 Firebase Real-time Listener: Live Sync across all devices
   useEffect(() => {
-    console.log('Subscribing to Firebase Firestore real-time updates...');
+    console.log('Connecting to Firebase Firestore Realtime Sync...');
     const unsubscribe = subscribeToFirebaseJobs((firebaseJobs) => {
       if (firebaseJobs && firebaseJobs.length > 0) {
         setJobs(sortJobsLatestFirst(firebaseJobs));
         setLastSyncedAt(new Date());
-        setFirebaseConnected(true);
       }
     });
 
@@ -124,98 +121,37 @@ export default function App() {
     };
   }, []);
 
-  // 🔄 Fallback sync from Google Sheets (on mount + periodic)
-  const syncFromSheetsQuietly = async (isManual = false) => {
-    if (isManual) setIsQuickSyncing(true);
-
+  // 🔄 Manual / Quick Fetch from Firebase
+  const handleQuickFetchFromFirebase = async () => {
+    setIsQuickSyncing(true);
     try {
-      // 1. Try Firebase fetch first
       const fbJobs = await fetchJobsFromFirebaseOnce();
       if (fbJobs && fbJobs.length > 0) {
         setJobs(sortJobsLatestFirst(fbJobs));
         setLastSyncedAt(new Date());
-        if (isManual) {
-          showToast(`⚡ ซิงค์ข้อมูลล่าสุดจาก Firebase Cloud Database เรียบร้อย (${fbJobs.length} งาน)`, 'success');
-        }
-        return;
-      }
-
-      // 2. Fallback to Google Sheets
-      if (settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
-        const result = await fetchJobsFromGoogleSheets(settings.googleSheetUrl);
-        if (result.success && result.data && result.data.length > 0) {
-          setJobs(sortJobsLatestFirst(result.data));
-          setLastSyncedAt(new Date());
-          if (isManual) {
-            showToast(`ดึงข้อมูลจาก Google Sheets สำเร็จ (${result.data.length} งาน)`, 'success');
-          }
-        } else if (isManual) {
-          showToast(result.message || 'ไม่สามารถดึงข้อมูลได้', 'error');
-        }
+        showToast(`⚡ ซิงค์ข้อมูลล่าสุดจาก Firebase Firestore เรียบร้อย (${fbJobs.length} งาน)`, 'success');
+      } else {
+        showToast('เชื่อมต่อ Firebase สำเร็จ (ยังไม่มีรายการงานใหม่)', 'info');
       }
     } catch (err: any) {
-      if (isManual) {
-        showToast(`เกิดข้อผิดพลาด: ${err.message || err}`, 'error');
-      }
+      showToast(`เกิดข้อผิดพลาด: ${err.message || err}`, 'error');
     } finally {
-      if (isManual) setIsQuickSyncing(false);
+      setIsQuickSyncing(false);
     }
   };
-
-  // Initial auto-fetch on mount & whenever URL changes
-  useEffect(() => {
-    // 1. Fetch shared jobs from server cache (cross-device sync)
-    fetchSharedServerJobs().then((serverJobs) => {
-      if (serverJobs && serverJobs.length > 0) {
-        setJobs(sortJobsLatestFirst(serverJobs));
-      }
-    });
-
-    // 2. Fetch from Google Sheets
-    if (settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
-      syncFromSheetsQuietly(false);
-    }
-  }, [settings.googleSheetUrl]);
-
-  // Background interval auto-sync every 25 seconds + tab focus trigger
-  useEffect(() => {
-    const interval = setInterval(() => {
-      syncFromSheetsQuietly(false);
-    }, 25000);
-
-    const handleFocus = () => {
-      syncFromSheetsQuietly(false);
-      fetchSharedServerJobs().then((serverJobs) => {
-        if (serverJobs && serverJobs.length > 0) {
-          setJobs(sortJobsLatestFirst(serverJobs));
-        }
-      });
-    };
-
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        syncFromSheetsQuietly(false);
-      }
-    });
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [settings.googleSheetUrl]);
 
   // 1. ฟังก์ชันกดส่งเอง (Direct Manual Send LINE Flex Message เข้า Group)
   const handleDirectSendLineFlex = async (job: JobItem, customHeader?: string) => {
     showToast(`กำลังส่ง LINE Flex สำหรับ "${job.title}" เข้ากลุ่ม...`, 'info');
     try {
-      const result = await saveAndNotifyJob(settings.googleSheetUrl || '', job, 'manual_send', {
-        targetId: settings.lineTargetGroupId || settings.lineTargetUserId || INITIAL_SETTINGS.lineTargetGroupId,
+      const targetId = settings.lineTargetGroupId || settings.lineTargetUserId || INITIAL_SETTINGS.lineTargetGroupId;
+      const result = await sendLineFlexDirect(job, {
+        targetId,
         channelAccessToken: settings.lineChannelAccessToken || INITIAL_SETTINGS.lineChannelAccessToken,
         companyName: settings.companyName || INITIAL_SETTINGS.companyName,
-        customEventLabel: customHeader || '📋 รายงานข้อมูลงานหน้างาน',
-        sendLine: true,
+        eventLabel: customHeader || '📋 รายงานข้อมูลงานหน้างาน',
       });
+
       if (result.success) {
         if (result.job) {
           setJobs((prev) => sortJobsLatestFirst(prev.map((j) => (j.id === result.job!.id ? result.job! : j))));
@@ -246,37 +182,33 @@ export default function App() {
     // 1. บันทึกลง Firebase Firestore ทันที (Real-time Database)
     try {
       await saveJobToFirebase(savedJob);
-      setFirebaseConnected(true);
       setLastSyncedAt(new Date());
     } catch (fbErr) {
       console.warn('Firebase save failed:', fbErr);
     }
 
-    // 2. Auto sync to Google Sheets (ถ้ามี URL) & auto push LINE Flex message เข้ากลุ่ม
+    // 2. Direct push LINE Flex message เข้ากลุ่ม
     try {
-      const result = await saveAndNotifyJob(
-        settings.googleSheetUrl || '',
-        savedJob,
-        isEdit ? 'edit_job' : 'new_job',
-        {
-          targetId: settings.lineTargetGroupId || settings.lineTargetUserId || INITIAL_SETTINGS.lineTargetGroupId,
-          channelAccessToken: settings.lineChannelAccessToken || INITIAL_SETTINGS.lineChannelAccessToken,
-          companyName: settings.companyName || INITIAL_SETTINGS.companyName,
-          sendLine: true,
-        }
-      );
+      const targetId = settings.lineTargetGroupId || settings.lineTargetUserId || INITIAL_SETTINGS.lineTargetGroupId;
+      const result = await sendLineFlexDirect(savedJob, {
+        targetId,
+        channelAccessToken: settings.lineChannelAccessToken || INITIAL_SETTINGS.lineChannelAccessToken,
+        companyName: settings.companyName || INITIAL_SETTINGS.companyName,
+        eventLabel: isEdit ? '✏️ อัพเดทข้อมูลงาน' : '🆕 แจ้งเตือนงานใหม่',
+      });
+
       if (result.job) {
         setJobs((prev) => sortJobsLatestFirst(prev.map((j) => (j.id === result.job!.id ? result.job! : j))));
       }
       setLastSyncedAt(new Date());
       showToast(
         isEdit
-          ? `✏️ บันทึกลง Cloud DB & ส่งแจ้งเตือน LINE เรียบร้อย`
-          : `🆕 บันทึกงานใหม่ลง Cloud DB และส่ง LINE เรียบร้อย!`,
+          ? `✏️ บันทึกลง Firebase Firestore & ส่งแจ้งเตือน LINE เรียบร้อย`
+          : `🆕 บันทึกงานใหม่ลง Firebase & ส่ง LINE เรียบร้อย!`,
         'success'
       );
     } catch (err) {
-      console.warn('Auto sync & notify failed:', err);
+      console.warn('LINE notify failed:', err);
     }
   };
 
@@ -306,7 +238,7 @@ export default function App() {
       setViewingJob((prev) => (prev ? { ...prev, status: newStatus, updatedAt: new Date().toISOString() } : null));
     }
 
-    showToast('⚡ อัพเดทสถานะลง Cloud DB และส่ง LINE แจ้งเตือนแล้ว', 'success');
+    showToast('⚡ อัพเดทสถานะลง Firebase และส่ง LINE แจ้งเตือนแล้ว', 'success');
 
     if (updatedTarget) {
       // 1. บันทึกลง Firebase Firestore
@@ -319,20 +251,16 @@ export default function App() {
 
       // 2. ส่งแจ้งเตือน LINE
       try {
-        await saveAndNotifyJob(
-          settings.googleSheetUrl || '',
-          updatedTarget,
-          'status_update',
-          {
-            targetId: settings.lineTargetGroupId || settings.lineTargetUserId || INITIAL_SETTINGS.lineTargetGroupId,
-            channelAccessToken: settings.lineChannelAccessToken || INITIAL_SETTINGS.lineChannelAccessToken,
-            companyName: settings.companyName || INITIAL_SETTINGS.companyName,
-            sendLine: true,
-          }
-        );
+        const targetId = settings.lineTargetGroupId || settings.lineTargetUserId || INITIAL_SETTINGS.lineTargetGroupId;
+        await sendLineFlexDirect(updatedTarget, {
+          targetId,
+          channelAccessToken: settings.lineChannelAccessToken || INITIAL_SETTINGS.lineChannelAccessToken,
+          companyName: settings.companyName || INITIAL_SETTINGS.companyName,
+          eventLabel: '🔄 อัพเดทสถานะงาน',
+        });
         setLastSyncedAt(new Date());
       } catch (err) {
-        console.warn('Quick status sync failed:', err);
+        console.warn('Quick status LINE send failed:', err);
       }
     }
   };
@@ -344,28 +272,13 @@ export default function App() {
     setJobs(updatedJobs);
     showToast(`ลบงาน "${target?.title || id}" เรียบร้อย`, 'info');
 
-    // 1. ลบจาก Firebase Firestore
+    // ลบจาก Firebase Firestore
     try {
       await deleteJobFromFirebase(id);
       setLastSyncedAt(new Date());
     } catch (fbErr) {
       console.warn('Firebase delete failed:', fbErr);
     }
-
-    // 2. อัพเดต Google Sheets สำรอง (ถ้ามี)
-    if (settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
-      try {
-        await saveJobToGoogleSheets(settings.googleSheetUrl, updatedJobs);
-        setLastSyncedAt(new Date());
-      } catch (err) {
-        console.warn('Delete sync to sheets failed:', err);
-      }
-    }
-  };
-
-  // Quick fetch all from Firebase / Google Sheets (Manual Trigger)
-  const handleQuickFetchFromSheets = () => {
-    syncFromSheetsQuietly(true);
   };
 
   // Open LINE Flex Preview
@@ -382,8 +295,39 @@ export default function App() {
 
   // Export CSV
   const handleExportCsv = () => {
-    downloadCsvFile(jobs, `field_jobs_${new Date().toISOString().substring(0, 10)}.csv`);
-    showToast('ดาวน์โหลดไฟล์ CSV สำหรับ Google Sheets สำเร็จ!', 'success');
+    const csvContent =
+      'data:text/csv;charset=utf-8,\uFEFF' +
+      'รหัสงาน,ชื่องาน,ผู้ติดต่อ,เบอร์ติดต่อ,วันที่,เวลา,สถานะ,แบรนด์,สินค้า,ราคา,การชำระเงิน,ที่อยู่,ละติจูด,ลองจิจูด,หมายเหตุ\n' +
+      jobs
+        .map((j) =>
+          [
+            `"${j.jobCode}"`,
+            `"${j.title}"`,
+            `"${j.contactPerson}"`,
+            `"${j.phoneNumber}"`,
+            `"${j.date}"`,
+            `"${j.time}"`,
+            `"${j.status}"`,
+            `"${j.productBrand}"`,
+            `"${j.productDetails}"`,
+            j.price,
+            `"${j.paymentType}"`,
+            `"${(j.location.address || '').replace(/"/g, '""')}"`,
+            j.location.lat,
+            j.location.lng,
+            `"${(j.notes || '').replace(/"/g, '""')}"`,
+          ].join(',')
+        )
+        .join('\n');
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `field_jobs_${new Date().toISOString().substring(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('ดาวน์โหลดไฟล์ CSV สำเร็จ!', 'success');
   };
 
   return (
@@ -396,7 +340,7 @@ export default function App() {
           setEditingJob(null);
           setIsFormModalOpen(true);
         }}
-        onOpenSheetsSettings={() => setIsSheetsModalOpen(true)}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
         jobs={jobs}
         settings={settings}
       />
@@ -413,13 +357,13 @@ export default function App() {
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-amber-400 flex items-center gap-1">
                 <Flame className="w-3.5 h-3.5 text-amber-400" />
-                <span>Firebase Cloud Real-time Database</span>
+                <span>Firebase Cloud Firestore Real-time DB</span>
               </span>
               <span className="text-slate-400">•</span>
-              <span className="text-emerald-300 font-medium">เชื่อมต่อสด ทุกเครื่องเห็นข้อมูลพร้อมกัน</span>
+              <span className="text-emerald-300 font-medium">เชื่อมต่อสด ทุกเครื่องเห็นข้อมูลตรงกันทันที</span>
               {lastSyncedAt && (
                 <span className="text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md text-[11px]">
-                  อัพเดทล่าสุด: {lastSyncedAt.toLocaleTimeString('th-TH')}
+                  อัพเดท: {lastSyncedAt.toLocaleTimeString('th-TH')}
                 </span>
               )}
             </div>
@@ -436,10 +380,10 @@ export default function App() {
             </button>
 
             <button
-              onClick={handleQuickFetchFromSheets}
+              onClick={handleQuickFetchFromFirebase}
               disabled={isQuickSyncing}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 rounded-lg font-medium transition-all cursor-pointer border border-slate-700"
-              title="คลิกเพื่อรีเฟรชข้อมูลทันที"
+              title="คลิกเพื่อรีเฟรชข้อมูลจาก Firebase"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isQuickSyncing ? 'animate-spin' : ''}`} />
               <span>{isQuickSyncing ? 'กำลังดึงข้อมูล...' : 'รีเฟรช'}</span>
@@ -497,7 +441,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-700">{settings.companyName}</span>
             <span>•</span>
-            <span>ระบบติดตามงานและอัพเดทสถานะหน้างาน</span>
+            <span>ระบบติดตามงานและอัพเดทสถานะหน้างาน (Firebase Cloud & LINE Flex)</span>
           </div>
 
           <div className="flex items-center gap-3 text-[11px] text-slate-400">
@@ -558,18 +502,18 @@ export default function App() {
         onDirectSendLine={handleDirectSendLineFlex}
       />
 
-      {/* Google Sheets Settings Modal */}
-      <SheetsAppSheetSettingsModal
-        isOpen={isSheetsModalOpen}
-        onClose={() => setIsSheetsModalOpen(false)}
+      {/* Firebase & LINE Settings Modal */}
+      <FirebaseSettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
         jobs={jobs}
         settings={settings}
-        onUpdateSettings={(newSettings) => {
+        onSaveSettings={(newSettings) => {
           setSettings(newSettings);
-          showToast('บันทึกการตั้งค่า Google Sheets เรียบร้อยแล้ว', 'success');
+          showToast('บันทึกการตั้งค่า Firebase & LINE เรียบร้อยแล้ว', 'success');
         }}
-        onImportJobs={(importedJobs) => {
-          setJobs(importedJobs);
+        onRefreshJobs={(refreshedJobs) => {
+          setJobs(refreshedJobs);
         }}
       />
     </div>

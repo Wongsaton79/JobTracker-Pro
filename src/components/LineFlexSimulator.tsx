@@ -22,7 +22,7 @@ import {
 import { JobItem, SyncSettings } from '../types';
 import { buildLineFlexMessage, generateLineNotifyText } from '../utils/lineFlexBuilder';
 import { formatCurrency, formatThaiDate, getPaymentTypeConfig, getStatusConfig } from '../utils/formatters';
-import { sendLineFlexViaAppsScript } from '../utils/sheetsSync';
+import { sendLineFlexDirect } from '../utils/lineFlexSender';
 
 interface LineFlexSimulatorProps {
   job: JobItem | null;
@@ -70,12 +70,12 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
     setIsSending(true);
     setSendResult(null);
 
-    const res = await sendLineFlexViaAppsScript(
-      settings.googleSheetUrl || '',
-      currentJob,
+    const res = await sendLineFlexDirect(currentJob, {
       targetId,
-      settings.companyName
-    );
+      channelAccessToken: settings.lineChannelAccessToken,
+      companyName: settings.companyName,
+      eventLabel: '📋 รายงานข้อมูลงานหน้างาน',
+    });
 
     setIsSending(false);
     if (res.success) {
@@ -93,23 +93,16 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
 
   const handleSendToUser = async () => {
     const targetId = settings.lineTargetUserId || 'U54fd541a6cf7746b1b4f0219634c7a53';
-    if (!settings.googleSheetUrl) {
-      setSendResult({
-        text: 'กรุณาตั้งค่า Google Sheets Web App URL ก่อนเพื่อเป็นช่องทางส่ง LINE Message',
-        type: 'error',
-      });
-      return;
-    }
 
     setIsSending(true);
     setSendResult(null);
 
-    const res = await sendLineFlexViaAppsScript(
-      settings.googleSheetUrl,
-      currentJob,
+    const res = await sendLineFlexDirect(currentJob, {
       targetId,
-      settings.companyName
-    );
+      channelAccessToken: settings.lineChannelAccessToken,
+      companyName: settings.companyName,
+      eventLabel: '📋 รายงานข้อมูลงานส่วนบุคคล',
+    });
 
     setIsSending(false);
     if (res.success) {
@@ -465,7 +458,7 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
                   </h4>
                   <ul className="list-disc list-inside space-y-1 text-slate-600 text-[11px]">
                     <li><strong>อย่าลืมเชิญบอทเข้ากลุ่ม:</strong> ดึงบัญชี LINE Official Account (บอทที่คุณสร้าง) เข้าไปอยู่ในกลุ่ม <code>{settings.lineTargetGroupId}</code> ด้วย เพื่อให้บอทมีสิทธิ์ส่งข้อความในกลุ่ม</li>
-                    <li><strong>ซิงค์อัตโนมัติ:</strong> เมื่อคุณบันทึกงานใหม่ หรือเปลี่ยนสถานะงานในเว็บ ข้อมูลจะถูกบันทึกลง Google Sheets และส่ง Flex Message แจ้งเตือนเข้ากลุ่มทันที</li>
+                    <li><strong>ซิงค์เรียลไทม์:</strong> เมื่อคุณบันทึกงานใหม่ หรือเปลี่ยนสถานะงานในเว็บ ข้อมูลจะถูกบันทึกลง Firebase Cloud Database และส่ง LINE Flex Message แจ้งเตือนเข้ากลุ่มทันที</li>
                   </ul>
                 </div>
               </div>

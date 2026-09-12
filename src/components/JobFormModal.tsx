@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { JobItem, JobStatus, PaymentType, SyncSettings } from '../types';
 import { InteractiveMap } from './InteractiveMap';
-import { PhotoUploader } from './PhotoUploader';
+import { PhotoUploader, uploadDirectToPublicCdn } from './PhotoUploader';
 import { POPULAR_BRANDS } from '../data/initialData';
 import { getPaymentTypeConfig, getStatusConfig } from '../utils/formatters';
 
@@ -106,7 +106,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) {
       // Scroll to top error
@@ -116,6 +116,22 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
     }
 
     setIsSubmitting(true);
+
+    // Ensure all photos are converted to public HTTPS CDN URLs before submitting
+    const rawPhotos = formData.photos || [];
+    const processedPhotos = await Promise.all(
+      rawPhotos.map(async (p) => {
+        if (p.url && p.url.startsWith('data:image/')) {
+          try {
+            const cdnUrl = await uploadDirectToPublicCdn(p.url);
+            if (cdnUrl) return { ...p, url: cdnUrl };
+          } catch (err) {
+            console.warn('Error uploading photo during submit:', err);
+          }
+        }
+        return p;
+      })
+    );
 
     const finalBrand =
       formData.productBrand === 'อื่นๆ' && customBrand.trim()
@@ -136,7 +152,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
         lat: 13.7563,
         lng: 100.5018,
       },
-      photos: formData.photos || [],
+      photos: processedPhotos,
       productBrand: finalBrand,
       productDetails: formData.productDetails?.trim() || '',
       price: Number(formData.price) || 0,
@@ -546,7 +562,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-sky-600 shrink-0" />
               <span>
-                เมื่อกดบันทึก ข้อมูลจะจัดเก็บในระบบ + พร้อม Sync ไปยัง <strong>Google Sheet / AppSheet</strong> และสร้าง <strong>LINE Flex Message</strong> อัตโนมัติ
+                เมื่อกดบันทึก ข้อมูลจะจัดเก็บลง <strong>Firebase Cloud Database</strong> แบบเรียลไทม์ และส่ง <strong>LINE Flex Message</strong> แจ้งเตือนเข้ากลุ่มทันที
               </span>
             </div>
           </div>
