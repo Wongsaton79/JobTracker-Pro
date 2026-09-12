@@ -58,7 +58,7 @@ export const exportJobsToCsv = (jobs: JobItem[]): string => {
 };
 
 export const downloadCsvFile = (jobs: JobItem[], filename = 'field_jobs_data.csv') => {
-  const csvContent = '\uFEFF' + exportJobsToCsv(jobs); // Add UTF-8 BOM for Excel/Google Sheets Thai encoding support
+  const csvContent = '\uFEFF' + exportJobsToCsv(jobs); // Add UTF-8 BOM for Thai encoding
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -71,10 +71,76 @@ export const downloadCsvFile = (jobs: JobItem[], filename = 'field_jobs_data.csv
 };
 
 export const generateGoogleAppsScriptCode = (sheetName = 'FieldJobs') => {
-  return `// ==========================================
-// 🚀 Google Apps Script for AppSheet & JobTracker Pro
-// วางโค้ดนี้ใน Google Sheet -> ส่วนขยาย (Extensions) -> Apps Script
-// ==========================================
+  return `// ==========================================================
+// 🚀 Google Apps Script for JobTracker Pro (Google Sheets Database)
+// วางโค้ดนี้ใน Google Sheet -> Extensions (ส่วนขยาย) -> Apps Script
+// หลังจากวางแล้วให้กด Deploy -> New deployment -> Web app -> Who has access: Anyone
+// ==========================================================
+
+function doGet(e) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("${sheetName}") || ss.getSheets()[0];
+    
+    var data = sheet.getDataRange().getValues();
+    if (data.length <= 1) {
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", data: [] }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    var headers = data[0];
+    var jobs = [];
+    
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      if (!row[0]) continue; // ข้ามแถวที่ไม่มีรหัสงาน
+      
+      var photoUrls = row[16] ? String(row[16]).split(' | ').filter(Boolean) : [];
+      var photos = photoUrls.map(function(u, idx) {
+        return {
+          id: 'photo_' + idx + '_' + Date.now(),
+          url: u,
+          timestamp: String(row[19] || new Date().toISOString()),
+          source: 'gallery'
+        };
+      });
+      
+      var job = {
+        id: 'job_' + String(row[0]).replace(/[^a-zA-Z0-9]/g, '_'),
+        jobCode: String(row[0]),
+        date: String(row[1] || '').substring(0, 10),
+        time: String(row[2] || '09:00'),
+        title: String(row[3] || 'ไม่มีชื่อหน้างาน'),
+        status: String(row[4] || 'pending').toLowerCase(),
+        contactPerson: String(row[5] || ''),
+        phoneNumber: String(row[6] || ''),
+        productBrand: String(row[7] || 'SCG'),
+        productDetails: String(row[8] || ''),
+        price: Number(row[9]) || 0,
+        paymentType: String(row[10] || 'cash'),
+        location: {
+          address: String(row[11] || ''),
+          lat: Number(row[12]) || 13.7563,
+          lng: Number(row[13]) || 100.5018
+        },
+        photos: photos,
+        notes: String(row[17] || ''),
+        assignedTo: String(row[18] || ''),
+        updatedAt: String(row[19] || new Date().toISOString()),
+        createdAt: String(row[19] || new Date().toISOString())
+      };
+      
+      jobs.push(job);
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", data: jobs }))
+      .setMimeType(ContentService.MimeType.JSON);
+      
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
 
 function doPost(e) {
   try {
@@ -108,7 +174,13 @@ function doPost(e) {
       sheet.getRange(1, 1, 1, 20).setBackground("#1E293B").setFontColor("#FFFFFF").setFontWeight("bold");
     }
 
-    var data = JSON.parse(e.postData.contents);
+    var payloadStr = e.postData ? e.postData.contents : "";
+    if (!payloadStr) {
+      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "No data received" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var data = JSON.parse(payloadStr);
     
     // หากเป็นการส่งข้อมูลก้อนใหญ่ (Sync ทั้งหมด)
     if (Array.isArray(data)) {
@@ -118,14 +190,14 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "success", count: data.length }))
         .setMimeType(ContentService.MimeType.JSON);
     } 
-    // หากเป็นการส่งทีละงาน (Real-time Webhook)
-    else if (data && data.jobCode) {
+    // หากเป็นการส่งทีละงาน (Real-time Save)
+    else if (data && (data.jobCode || data.title)) {
       appendOrUpdateJob(sheet, data);
       return ContentService.createTextOutput(JSON.stringify({ status: "success", jobCode: data.jobCode }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
-    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Invalid payload" }))
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Invalid payload format" }))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
@@ -136,7 +208,7 @@ function doPost(e) {
 
 function appendOrUpdateJob(sheet, job) {
   var data = sheet.getDataRange().getValues();
-  var jobCode = job.jobCode;
+  var jobCode = job.jobCode || ("JOB-" + Date.now().toString().slice(-4));
   var rowIndex = -1;
 
   for (var i = 1; i < data.length; i++) {
@@ -147,17 +219,17 @@ function appendOrUpdateJob(sheet, job) {
   }
 
   var rowData = [
-    job.jobCode,
-    job.date,
-    job.time,
-    job.title,
-    job.status,
-    job.contactPerson,
-    job.phoneNumber,
-    job.productBrand,
+    jobCode,
+    job.date || new Date().toISOString().substring(0, 10),
+    job.time || "09:00",
+    job.title || "งานหน้างาน",
+    job.status || "pending",
+    job.contactPerson || "",
+    job.phoneNumber || "",
+    job.productBrand || "",
     job.productDetails || "",
-    job.price,
-    job.paymentType,
+    Number(job.price) || 0,
+    job.paymentType || "cash",
     (job.location && job.location.address) || "",
     (job.location && job.location.lat) || "",
     (job.location && job.location.lng) || "",
@@ -166,7 +238,7 @@ function appendOrUpdateJob(sheet, job) {
     (job.photos ? job.photos.map(function(p){ return p.url; }).join(" | ") : ""),
     job.notes || "",
     job.assignedTo || "",
-    new Date().toISOString()
+    job.updatedAt || new Date().toISOString()
   ];
 
   if (rowIndex > 0) {
@@ -178,37 +250,74 @@ function appendOrUpdateJob(sheet, job) {
 `;
 };
 
-export const syncWithEndpoint = async (
-  endpointUrl: string,
-  payload: any
-): Promise<{ success: boolean; message: string }> => {
-  if (!endpointUrl) {
-    return { success: false, message: 'ไม่ได้ระบุ URL ปลายทาง' };
+/**
+ * ดึงข้อมูลงานทั้งหมดจาก Google Sheets ผ่าน Apps Script Web App (doGet)
+ */
+export const fetchJobsFromGoogleSheets = async (webAppUrl: string): Promise<{ success: boolean; data?: JobItem[]; message: string }> => {
+  if (!webAppUrl || !webAppUrl.startsWith('http')) {
+    return { success: false, message: 'กรุณาระบุ URL Google Apps Script ให้ถูกต้อง' };
   }
 
   try {
-    const response = await fetch(endpointUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+    const response = await fetch(webAppUrl, {
+      method: 'GET',
     });
 
-    if (response.ok) {
-      return { success: true, message: 'ส่งข้อมูลไปยังระบบเรียบร้อยแล้ว' };
+    if (!response.ok) {
+      return { success: false, message: `ไม่สามารถดึงข้อมูลได้ (HTTP ${response.status})` };
+    }
+
+    const result = await response.json();
+    if (result.status === 'success' && Array.isArray(result.data)) {
+      return {
+        success: true,
+        data: result.data,
+        message: `ดึงข้อมูลจาก Google Sheets สำเร็จ (${result.data.length} รายการ)`,
+      };
     } else {
       return {
         success: false,
-        message: `ส่งข้อมูลไม่สำเร็จ (HTTP ${response.status})`,
+        message: result.message || 'โครงสร้างข้อมูลตอบกลับจาก Google Sheet ไม่ถูกต้อง',
       };
     }
   } catch (err: any) {
-    // Note: Due to CORS or Webhook constraints, we catch and report clearly
-    console.warn('Sync dispatch error:', err);
     return {
       success: false,
-      message: `เกิดข้อผิดพลาดในการเชื่อมต่อเครือข่าย หรือติดสิทธิ์ CORS: ${err.message || err}`,
+      message: `เกิดข้อผิดพลาดในการเชื่อมต่อ Google Sheets: ${err.message || err}`,
+    };
+  }
+};
+
+/**
+ * บันทึกงาน (1 งาน หรือ หลายงาน) ขึ้น Google Sheets ผ่าน Apps Script Web App (doPost)
+ */
+export const saveJobToGoogleSheets = async (
+  webAppUrl: string,
+  jobOrJobs: JobItem | JobItem[]
+): Promise<{ success: boolean; message: string }> => {
+  if (!webAppUrl || !webAppUrl.startsWith('http')) {
+    return { success: false, message: 'กรุณาระบุ URL Google Apps Script ให้ถูกต้อง' };
+  }
+
+  try {
+    // ใช้ application/x-www-form-urlencoded หรือ raw text payload เพื่อป้องกัน CORS preflight
+    await fetch(webAppUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify(jobOrJobs),
+    });
+
+    return {
+      success: true,
+      message: 'ส่งข้อมูลไปยัง Google Sheets สำเร็จเรียบร้อย',
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `บันทึกลง Google Sheets ไม่สำเร็จ: ${err.message || err}`,
     };
   }
 };

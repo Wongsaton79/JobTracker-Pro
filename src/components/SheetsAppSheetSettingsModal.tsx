@@ -10,11 +10,19 @@ import {
   ExternalLink,
   Code2,
   Database,
-  Layers,
+  CloudDownload,
+  CloudUpload,
   Save,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import { JobItem, SyncSettings } from '../types';
-import { downloadCsvFile, generateGoogleAppsScriptCode } from '../utils/sheetsSync';
+import {
+  downloadCsvFile,
+  generateGoogleAppsScriptCode,
+  fetchJobsFromGoogleSheets,
+  saveJobToGoogleSheets,
+} from '../utils/sheetsSync';
 
 interface SheetsAppSheetSettingsModalProps {
   isOpen: boolean;
@@ -22,6 +30,7 @@ interface SheetsAppSheetSettingsModalProps {
   jobs: JobItem[];
   settings: SyncSettings;
   onUpdateSettings: (settings: SyncSettings) => void;
+  onImportJobs?: (jobs: JobItem[]) => void;
 }
 
 export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalProps> = ({
@@ -30,14 +39,16 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
   jobs,
   settings,
   onUpdateSettings,
+  onImportJobs,
 }) => {
   if (!isOpen) return null;
 
   const [formData, setFormData] = useState<SyncSettings>(settings);
-  const [activeTab, setActiveTab] = useState<'appsheet_guide' | 'gas_code' | 'csv_export'>('appsheet_guide');
+  const [activeTab, setActiveTab] = useState<'sheet_setup' | 'gas_code' | 'csv_export'>('sheet_setup');
   const [copiedCode, setCopiedCode] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncSuccess, setSyncSuccess] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const appsScriptCode = generateGoogleAppsScriptCode('FieldJobs');
 
@@ -53,13 +64,59 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
     onClose();
   };
 
-  const handleManualSync = () => {
+  // ดึงข้อมูลทั้งหมดจาก Google Sheets มาแสดงในแอป
+  const handleFetchFromSheets = async () => {
+    if (!formData.googleSheetUrl) {
+      setStatusMessage({ text: 'กรุณากรอก Google Sheets Web App URL ก่อน', type: 'error' });
+      return;
+    }
+
+    setIsFetching(true);
+    setStatusMessage(null);
+
+    const result = await fetchJobsFromGoogleSheets(formData.googleSheetUrl);
+    setIsFetching(false);
+
+    if (result.success && result.data && result.data.length > 0) {
+      if (onImportJobs) {
+        onImportJobs(result.data);
+      }
+      setStatusMessage({
+        text: `✅ ดึงข้อมูลสำเร็จ! นำเข้าข้อมูลงานแล้ว ${result.data.length} รายการ`,
+        type: 'success',
+      });
+    } else {
+      setStatusMessage({
+        text: result.message || 'ไม่สามารถดึงข้อมูลได้ กรุณาตรวจสอบสิทธิ์การเข้าถึง Web App (Anyone)',
+        type: 'error',
+      });
+    }
+  };
+
+  // ส่งข้อมูลงานทั้งหมดในเครื่องขึ้นไปเก็บใน Google Sheets
+  const handleUploadAllToSheets = async () => {
+    if (!formData.googleSheetUrl) {
+      setStatusMessage({ text: 'กรุณากรอก Google Sheets Web App URL ก่อน', type: 'error' });
+      return;
+    }
+
     setIsSyncing(true);
-    setTimeout(() => {
-      setIsSyncing(false);
-      setSyncSuccess(true);
-      setTimeout(() => setSyncSuccess(false), 3000);
-    }, 1200);
+    setStatusMessage(null);
+
+    const result = await saveJobToGoogleSheets(formData.googleSheetUrl, jobs);
+    setIsSyncing(false);
+
+    if (result.success) {
+      setStatusMessage({
+        text: `✅ ส่งข้อมูลงานทั้งหมด (${jobs.length} รายการ) ขึ้น Google Sheets เรียบร้อยแล้ว`,
+        type: 'success',
+      });
+    } else {
+      setStatusMessage({
+        text: result.message,
+        type: 'error',
+      });
+    }
   };
 
   return (
@@ -73,10 +130,10 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold">
-                การเชื่อมต่อ Google Sheets & AppSheet
+                การเชื่อมต่อฐานข้อมูล Google Sheets
               </h2>
               <p className="text-xs text-emerald-100">
-                ตั้งค่าฐานข้อมูล บันทึก/ดึงข้อมูลแบบ Real-time และส่งออกไฟล์
+                ใช้ Google Sheets เป็นฐานข้อมูลกลาง บันทึกและดึงข้อมูลมาแสดงผลได้ทุกที่ ทุกอุปกรณ์
               </p>
             </div>
           </div>
@@ -91,18 +148,18 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
 
         {/* Modal Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-          {/* Quick Tabs */}
+          {/* Tabs */}
           <div className="flex gap-2 border-b border-slate-200 pb-2 text-xs font-semibold">
             <button
-              onClick={() => setActiveTab('appsheet_guide')}
+              onClick={() => setActiveTab('sheet_setup')}
               className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-                activeTab === 'appsheet_guide'
+                activeTab === 'sheet_setup'
                   ? 'bg-slate-900 text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               <Database className="w-3.5 h-3.5" />
-              <span>วิธีเชื่อมต่อกับ AppSheet</span>
+              <span>ตั้งค่า Google Sheets URL</span>
             </button>
             <button
               onClick={() => setActiveTab('gas_code')}
@@ -113,7 +170,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
               }`}
             >
               <Code2 className="w-3.5 h-3.5" />
-              <span>Apps Script Webhook Code</span>
+              <span>โค้ด Apps Script พร้อมใช้</span>
             </button>
             <button
               onClick={() => setActiveTab('csv_export')}
@@ -128,86 +185,100 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
             </button>
           </div>
 
-          {/* Tab 1: AppSheet & Google Sheets Setup Guide */}
-          {activeTab === 'appsheet_guide' && (
+          {/* Status Message Notification Banner */}
+          {statusMessage && (
+            <div
+              className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                statusMessage.type === 'success'
+                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                  : 'bg-rose-50 text-rose-900 border-rose-300'
+              }`}
+            >
+              {statusMessage.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              )}
+              <span>{statusMessage.text}</span>
+            </div>
+          )}
+
+          {/* Tab 1: Single Google Sheets URL Setup */}
+          {activeTab === 'sheet_setup' && (
             <div className="space-y-4 text-xs">
-              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
-                <h3 className="font-bold text-emerald-950 text-sm flex items-center gap-1.5">
+              <div className="p-3.5 bg-emerald-50/90 border border-emerald-200 rounded-xl space-y-1.5">
+                <h3 className="font-bold text-emerald-950 text-xs sm:text-sm flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-emerald-600" />
-                  <span>โครงสร้างตารางข้อมูลใน Google Sheets สำหรับ AppSheet:</span>
+                  <span>ใช้ Google Sheets เป็นฐานข้อมูลกลาง (Cloud Database)</span>
                 </h3>
-                <p className="text-emerald-900">
-                  ระบบนี้ออกแบบโครงสร้างข้อมูล (Columns) ให้ตรงตามมาตรฐานของ Google Sheets และ AppSheet โดยมีคอลัมน์สำคัญดังนี้:
+                <p className="text-emerald-900 leading-relaxed text-[11px] sm:text-xs">
+                  เมื่อใส่ Web App URL ด้านล่างนี้ ทุกครั้งที่มีการบันทึกงานใหม่ หรือแก้ไขสถานะงาน ระบบจะซิงค์ข้อมูลเข้าตารางใน Google Sheet ของคุณทันที และเมื่อเปิดใช้งานบนมือถือเครื่องอื่นนอกสถานที่ ก็สามารถกด <strong>"ดึงข้อมูลจาก Google Sheets"</strong> เพื่อเรียกดูงานทั้งหมดได้ทันที
                 </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
-                  <div className="bg-white p-1.5 rounded border border-emerald-200">1. Job_Code (รหัสงาน)</div>
-                  <div className="bg-white p-1.5 rounded border border-emerald-200">2. Date (วันที่)</div>
-                  <div className="bg-white p-1.5 rounded border border-emerald-200">3. Time (เวลา)</div>
-                  <div className="bg-white p-1.5 rounded border border-emerald-200">4. Title (ชื่อหน้างาน)</div>
-                  <div className="bg-white p-1.5 rounded border border-emerald-200">5. Status (สถานะงาน)</div>
-                  <div className="bg-white p-1.5 rounded border border-emerald-200">6. Contact (ผู้ติดต่อ)</div>
-                  <div className="bg-white p-1.5 rounded border border-emerald-200">7. Phone (เบอร์โทร)</div>
-                  <div className="bg-white p-1.5 rounded border border-emerald-200">8. Brand (แบรนด์สินค้า)</div>
-                  <div className="bg-white p-1.5 rounded border border-emerald-200">9. Price_THB (ราคา)</div>
-                  <div className="bg-white p-1.5 rounded border border-emerald-200">10. Payment_Type (การชำระ)</div>
-                  <div className="bg-white p-1.5 rounded border border-emerald-200">11. Lat & Lng (พิกัด GPS)</div>
-                  <div className="bg-white p-1.5 rounded border border-emerald-200">12. Photos (ลิงก์ภาพ)</div>
-                </div>
               </div>
 
-              {/* Endpoint Configuration Form */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                <h4 className="font-bold text-slate-800 text-sm">การตั้งค่า URL ปลายทาง (Webhook Endpoints)</h4>
+              {/* Single URL Form */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3.5">
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">
-                    Google Sheets Webhook / Apps Script Web App URL:
+                  <label className="block text-slate-800 font-bold mb-1">
+                    Google Sheets Web App URL (Apps Script /exec):
                   </label>
                   <input
                     type="url"
                     value={formData.googleSheetUrl || ''}
                     onChange={(e) => setFormData({ ...formData, googleSheetUrl: e.target.value })}
                     placeholder="https://script.google.com/macros/s/AKfycb.../exec"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    * ได้จากการกด Deploy ➔ New deployment ➔ Web app ใน Google Apps Script
+                  </p>
                 </div>
 
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">
-                    AppSheet API / Webhook Action URL:
-                  </label>
-                  <input
-                    type="url"
-                    value={formData.appSheetWebhookUrl || ''}
-                    onChange={(e) => setFormData({ ...formData, appSheetWebhookUrl: e.target.value })}
-                    placeholder="https://api.appsheet.com/api/v2/apps/.../tables/Jobs/Action"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">
-                    ชื่อบริษัท / ทีมช่าง สำหรับหัวรายงาน:
+                  <label className="block text-slate-700 font-semibold mb-1">
+                    ชื่อบริษัท / ทีมช่าง (สำหรับหัวเอกสาร & LINE Flex):
                   </label>
                   <input
                     type="text"
                     value={formData.companyName}
                     onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
 
-                <div className="pt-2 flex items-center justify-between">
+                {/* Direct Action Sync Buttons */}
+                <div className="pt-2 border-t border-slate-200 flex flex-col sm:flex-row gap-2">
                   <button
                     type="button"
-                    onClick={handleManualSync}
-                    disabled={isSyncing}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold shadow-xs transition-colors"
+                    onClick={handleFetchFromSheets}
+                    disabled={isFetching}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold shadow-xs transition-colors"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                    <span>{isSyncing ? 'กำลังซิงค์ข้อมูล...' : syncSuccess ? '✅ ซิงค์สำเร็จแล้ว!' : 'ทดสอบซิงค์ข้อมูลเดี๋ยวนี้'}</span>
+                    <CloudDownload className={`w-4 h-4 ${isFetching ? 'animate-bounce' : ''}`} />
+                    <span>{isFetching ? 'กำลังดึงข้อมูล...' : 'ดึงข้อมูลจาก Google Sheets มาแสดง'}</span>
                   </button>
-                  <span className="text-[11px] text-slate-400">ข้อมูลปัจจุบัน: {jobs.length} งาน</span>
+
+                  <button
+                    type="button"
+                    onClick={handleUploadAllToSheets}
+                    disabled={isSyncing}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold shadow-xs transition-colors"
+                  >
+                    <CloudUpload className={`w-4 h-4 ${isSyncing ? 'animate-bounce' : ''}`} />
+                    <span>{isSyncing ? 'กำลังส่งข้อมูล...' : 'ส่งข้อมูลทั้งหมดขึ้น Google Sheets'}</span>
+                  </button>
                 </div>
+              </div>
+
+              {/* Quick 3-Step Guide */}
+              <div className="p-3.5 bg-slate-100/80 rounded-xl border border-slate-200 text-slate-700 space-y-1.5 text-[11px]">
+                <div className="font-bold text-slate-800">📌 ขั้นตอนการเอา URL จาก Google Sheets:</div>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>เปิด Google Sheet ของคุณ ➔ เมนู <strong>Extensions (ส่วนขยาย)</strong> ➔ <strong>Apps Script</strong></li>
+                  <li>คัดลอกโค้ดจากแท็บ <strong>"โค้ด Apps Script พร้อมใช้"</strong> ไปวางแล้วกด Save</li>
+                  <li>กดปุ่ม <strong>Deploy</strong> ➔ <strong>New deployment</strong> ➔ เลือก <strong>Web app</strong> ➔ ตรงช่อง Who has access ให้เลือก <strong>Anyone</strong></li>
+                  <li>คัดลอก Web App URL ที่ได้มาใส่ในช่องด้านบนนี้</li>
+                </ol>
               </div>
             </div>
           )}
@@ -217,7 +288,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-slate-600">
-                  คัดลอกโค้ดนี้ไปวางใน Google Sheet → <strong>Extensions (ส่วนขยาย) → Apps Script</strong> เพื่อสร้าง Webhook อัตโนมัติ:
+                  โค้ดนี้รองรับทั้งการ <strong>ดึงข้อมูล (doGet)</strong> และ <strong>บันทึกข้อมูล (doPost)</strong> อัตโนมัติ:
                 </p>
                 <button
                   onClick={handleCopyCode}
@@ -231,7 +302,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
                   ) : (
                     <>
                       <Copy className="w-3.5 h-3.5" />
-                      <span>คัดลอกโค้ด Apps Script</span>
+                      <span>คัดลอกโค้ดทั้งหมด</span>
                     </>
                   )}
                 </button>
@@ -250,7 +321,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
                 <FileSpreadsheet className="w-12 h-12 mx-auto text-emerald-600" />
                 <h4 className="text-base font-bold text-slate-800">ส่งออกข้อมูลงานทั้งหมด ({jobs.length} รายการ)</h4>
                 <p className="text-slate-500 max-w-md mx-auto">
-                  ไฟล์ CSV รองรับภาษาไทยสมบูรณ์แบบ (UTF-8 with BOM) สามารถเปิดใน Excel, Google Sheets, หรือนำเข้าสู่ AppSheet ได้ทันที
+                  ไฟล์ CSV รองรับภาษาไทยสมบูรณ์แบบ (UTF-8 with BOM) สามารถเปิดใน Excel, Google Sheets หรือนำเข้าตารางได้ทันที
                 </p>
                 <button
                   onClick={() => downloadCsvFile(jobs, `field_jobs_${new Date().toISOString().substring(0, 10)}.csv`)}

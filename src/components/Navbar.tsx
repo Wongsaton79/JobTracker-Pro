@@ -6,7 +6,6 @@ import {
   MapPin,
   Send,
   FileSpreadsheet,
-  Layers,
   Smartphone,
   Tablet,
   Monitor,
@@ -34,6 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const pendingJobsCount = jobs.filter((j) => j.status === 'in_progress' || j.status === 'pending').length;
   const totalRevenue = jobs.reduce((sum, j) => sum + j.price, 0);
+  const isSheetConnected = Boolean(settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http'));
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900 text-white shadow-md border-b border-slate-800 backdrop-blur-md">
@@ -58,7 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 truncate hidden sm:block">
-                ระบบติดตามและอัพเดทสถานะหน้างาน • Google Sheets & LINE Flex
+                ระบบติดตามและอัพเดทสถานะหน้างาน • ฐานข้อมูล Google Sheets & LINE Flex
               </p>
             </div>
           </div>
@@ -78,14 +78,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
-            {/* Google Sheets / AppSheet Button */}
+            {/* Google Sheets Central Database Button */}
             <button
               onClick={onOpenSheetsSettings}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-700/50 rounded-xl text-xs font-semibold transition-all shadow-xs"
-              title="Google Sheet & AppSheet Synchronization"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all shadow-xs border ${
+                isSheetConnected
+                  ? 'bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 border-emerald-500/50 ring-1 ring-emerald-500/30'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+              }`}
+              title="Google Sheets Database Connection"
             >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-              <span className="hidden sm:inline">Google Sheets / AppSheet</span>
+              <FileSpreadsheet className={`w-4 h-4 ${isSheetConnected ? 'text-emerald-400' : 'text-slate-400'}`} />
+              <span className="hidden sm:inline">ฐานข้อมูล Google Sheets</span>
+              {isSheetConnected && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Connected" />
+              )}
             </button>
 
             {/* Quick Add Job Button */}
@@ -122,7 +129,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <BarChart3 className="w-3.5 h-3.5" />
-            <span>📊 แดชบอร์ดสรุปผลรายเดือน</span>
+            <span>📊 แดชบอร์ดสรุปผล</span>
           </button>
 
           <button

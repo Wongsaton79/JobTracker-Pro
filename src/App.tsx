@@ -9,8 +9,8 @@ import { JobDetailModal } from './components/JobDetailModal';
 import { SheetsAppSheetSettingsModal } from './components/SheetsAppSheetSettingsModal';
 import { INITIAL_JOBS, INITIAL_SETTINGS } from './data/initialData';
 import { JobItem, JobStatus, SyncSettings } from './types';
-import { downloadCsvFile } from './utils/sheetsSync';
-import { CheckCircle2, AlertCircle, Sparkles, Smartphone, Tablet, Monitor } from 'lucide-react';
+import { downloadCsvFile, saveJobToGoogleSheets, fetchJobsFromGoogleSheets } from './utils/sheetsSync';
+import { CheckCircle2, AlertCircle, Sparkles, Smartphone, Tablet, Monitor, RefreshCw } from 'lucide-react';
 
 export default function App() {
   // Load saved jobs from localStorage or fallback to initial data
@@ -48,6 +48,7 @@ export default function App() {
   const [viewingJob, setViewingJob] = useState<JobItem | null>(null);
   const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
   const [linePreviewJob, setLinePreviewJob] = useState<JobItem | null>(null);
+  const [isQuickSyncing, setIsQuickSyncing] = useState(false);
 
   // Toast notifications
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -77,8 +78,8 @@ export default function App() {
     }, 3500);
   };
 
-  // Add or Update Job
-  const handleSaveJob = (savedJob: JobItem) => {
+  // Add or Update Job & Auto Sync to Google Sheets
+  const handleSaveJob = async (savedJob: JobItem) => {
     const isEdit = jobs.some((j) => j.id === savedJob.id);
 
     if (isEdit) {
@@ -86,9 +87,18 @@ export default function App() {
       showToast(`อัพเดทงาน "${savedJob.title}" เรียบร้อยแล้ว`, 'success');
     } else {
       setJobs((prev) => [savedJob, ...prev]);
-      showToast(`บันทึกงานใหม่ "${savedJob.title}" สำเร็จ! ส่งข้อมูลไปยัง Google Sheet & LINE Flex แล้ว`, 'success');
+      showToast(`บันทึกงานใหม่ "${savedJob.title}" สำเร็จ!`, 'success');
     }
     setEditingJob(null);
+
+    // Auto sync to Google Sheets if Web App URL is configured
+    if (settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
+      try {
+        await saveJobToGoogleSheets(settings.googleSheetUrl, savedJob);
+      } catch (err) {
+        console.warn('Auto sync to sheets failed:', err);
+      }
+    }
   };
 
   // Delete Job
@@ -98,21 +108,52 @@ export default function App() {
     showToast(`ลบงาน "${target?.title || id}" เรียบร้อย`, 'info');
   };
 
-  // Quick status change
-  const handleQuickStatusChange = (id: string, newStatus: JobStatus) => {
+  // Quick status change & sync
+  const handleQuickStatusChange = async (id: string, newStatus: JobStatus) => {
+    let updatedTarget: JobItem | null = null;
     setJobs((prev) =>
-      prev.map((j) =>
-        j.id === id
-          ? {
-              ...j,
-              status: newStatus,
-              updatedAt: new Date().toISOString(),
-              syncStatus: 'pending',
-            }
-          : j
-      )
+      prev.map((j) => {
+        if (j.id === id) {
+          const updated = {
+            ...j,
+            status: newStatus,
+            updatedAt: new Date().toISOString(),
+            syncStatus: 'synced' as const,
+          };
+          updatedTarget = updated;
+          return updated;
+        }
+        return j;
+      })
     );
     showToast('เปลี่ยนสถานะงานเรียบร้อยแล้ว', 'success');
+
+    if (updatedTarget && settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
+      try {
+        await saveJobToGoogleSheets(settings.googleSheetUrl, updatedTarget);
+      } catch (err) {
+        console.warn('Quick status sync failed:', err);
+      }
+    }
+  };
+
+  // Quick fetch all from Google Sheets
+  const handleQuickFetchFromSheets = async () => {
+    if (!settings.googleSheetUrl || !settings.googleSheetUrl.startsWith('http')) {
+      setIsSheetsModalOpen(true);
+      return;
+    }
+
+    setIsQuickSyncing(true);
+    const result = await fetchJobsFromGoogleSheets(settings.googleSheetUrl);
+    setIsQuickSyncing(false);
+
+    if (result.success && result.data && result.data.length > 0) {
+      setJobs(result.data);
+      showToast(`ดึงข้อมูลจาก Google Sheets สำเร็จ (${result.data.length} งาน)`, 'success');
+    } else {
+      showToast(result.message || 'ไม่สามารถดึงข้อมูลได้', 'error');
+    }
   };
 
   // Open LINE Flex Preview
@@ -144,6 +185,26 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 space-y-4">
+        {/* Quick Sync Banner if Google Sheets URL is set */}
+        {settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http') && (
+          <div className="bg-emerald-900/90 text-white px-4 py-2.5 rounded-2xl shadow-xs flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+              <span className="font-medium">
+                เชื่อมต่อฐานข้อมูล Google Sheets เรียบร้อยแล้ว (ระบบบันทึกและซิงค์ข้อมูลอัตโนมัติ)
+              </span>
+            </div>
+            <button
+              onClick={handleQuickFetchFromSheets}
+              disabled={isQuickSyncing}
+              className="flex items-center gap-1.5 px-3 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg font-bold transition-all"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isQuickSyncing ? 'animate-spin' : ''}`} />
+              <span>{isQuickSyncing ? 'กำลังดึงข้อมูล...' : 'ดึงข้อมูลล่าสุดจาก Sheet'}</span>
+            </button>
+          </div>
+        )}
+
         {/* Tab 1: Job List */}
         {activeTab === 'jobs' && (
           <JobListView
@@ -252,7 +313,7 @@ export default function App() {
         onSendLinePreview={handleOpenLineFlex}
       />
 
-      {/* Sheets & AppSheet Settings Modal */}
+      {/* Google Sheets Settings Modal */}
       <SheetsAppSheetSettingsModal
         isOpen={isSheetsModalOpen}
         onClose={() => setIsSheetsModalOpen(false)}
@@ -260,7 +321,10 @@ export default function App() {
         settings={settings}
         onUpdateSettings={(newSettings) => {
           setSettings(newSettings);
-          showToast('บันทึกการตั้งค่า Google Sheets & AppSheet เรียบร้อยแล้ว', 'success');
+          showToast('บันทึกการตั้งค่า Google Sheets เรียบร้อยแล้ว', 'success');
+        }}
+        onImportJobs={(importedJobs) => {
+          setJobs(importedJobs);
         }}
       />
     </div>
