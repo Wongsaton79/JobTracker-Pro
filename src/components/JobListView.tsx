@@ -6,6 +6,7 @@ import {
   LayoutGrid,
   List as ListIcon,
   Download,
+  FileSpreadsheet,
   Calendar,
   Layers,
   ArrowUpDown,
@@ -29,6 +30,7 @@ interface JobListViewProps {
   onSendLinePreview: (job: JobItem) => void;
   onDirectSendLine?: (job: JobItem) => void;
   onExportCsv: () => void;
+  onExportExcel?: () => void;
 }
 
 export const JobListView: React.FC<JobListViewProps> = ({
@@ -41,6 +43,7 @@ export const JobListView: React.FC<JobListViewProps> = ({
   onSendLinePreview,
   onDirectSendLine,
   onExportCsv,
+  onExportExcel,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -171,14 +174,26 @@ export const JobListView: React.FC<JobListViewProps> = ({
               </button>
             </div>
 
+            {/* Export Excel (.xlsx) */}
+            {onExportExcel && (
+              <button
+                onClick={onExportExcel}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-semibold border border-emerald-200 transition-colors shadow-2xs"
+                title="ดาวน์โหลดไฟล์ Excel (.xlsx) แบบมีตารางสรุปผล"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <span>Export Excel</span>
+              </button>
+            )}
+
             {/* Export CSV */}
             <button
               onClick={onExportCsv}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-medium border border-slate-200 transition-colors"
-              title="ดาวน์โหลด CSV สำหรับ Google Sheets / Excel"
+              className="hidden md:flex items-center gap-1.5 px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-medium border border-slate-200 transition-colors"
+              title="ดาวน์โหลด CSV สำหรับ Google Sheets"
             >
-              <Download className="w-4 h-4 text-slate-500" />
-              <span>Export CSV</span>
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <span>CSV</span>
             </button>
 
             {/* Add New Job Button */}

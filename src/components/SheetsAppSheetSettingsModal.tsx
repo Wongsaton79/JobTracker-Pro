@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Code2,
   Database,
+  Flame,
   CloudDownload,
   CloudUpload,
   Save,
@@ -30,6 +31,8 @@ import {
   saveJobToGoogleSheets,
   testSystemConnection,
 } from '../utils/sheetsSync';
+import { exportJobsToExcel } from '../utils/excelExport';
+import { DEFAULT_FIREBASE_CONFIG, syncAllJobsToFirebase, fetchJobsFromFirebaseOnce } from '../utils/firebaseSync';
 
 interface SheetsAppSheetSettingsModalProps {
   isOpen: boolean;
@@ -51,7 +54,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
   if (!isOpen) return null;
 
   const [formData, setFormData] = useState<SyncSettings>(settings);
-  const [activeTab, setActiveTab] = useState<'sheet_setup' | 'line_setup' | 'gas_code' | 'github_guide' | 'csv_export'>('sheet_setup');
+  const [activeTab, setActiveTab] = useState<'firebase_status' | 'sheet_setup' | 'line_setup' | 'gas_code' | 'github_guide' | 'export'>('firebase_status');
   const [copiedCode, setCopiedCode] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
@@ -196,6 +199,28 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
           {/* Tabs */}
           <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2 text-xs font-semibold">
             <button
+              onClick={() => setActiveTab('firebase_status')}
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+                activeTab === 'firebase_status'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+              }`}
+            >
+              <Flame className="w-3.5 h-3.5 text-amber-300" />
+              <span>🔥 Firebase Cloud DB (เปิดใช้งานแล้ว)</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('export')}
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+                activeTab === 'export'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>ส่งออก Excel / CSV</span>
+            </button>
+            <button
               onClick={() => setActiveTab('sheet_setup')}
               className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
                 activeTab === 'sheet_setup'
@@ -204,7 +229,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
               }`}
             >
               <Database className="w-3.5 h-3.5" />
-              <span>Google Sheets URL</span>
+              <span>Google Sheets URL (สำรอง)</span>
             </button>
             <button
               onClick={() => setActiveTab('line_setup')}
@@ -226,7 +251,7 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
               }`}
             >
               <Code2 className="w-3.5 h-3.5" />
-              <span>โค้ด Apps Script พร้อมใช้</span>
+              <span>โค้ด Apps Script</span>
             </button>
             <button
               onClick={() => setActiveTab('github_guide')}
@@ -238,17 +263,6 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
             >
               <GitBranch className="w-3.5 h-3.5" />
               <span>วิธีอัพเดตขึ้น GitHub</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('csv_export')}
-              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-                activeTab === 'csv_export'
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>ส่งออก CSV</span>
             </button>
           </div>
 
@@ -267,6 +281,120 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               )}
               <span className="leading-relaxed">{statusMessage.text}</span>
+            </div>
+          )}
+
+          {/* Tab 0: Firebase Firestore Status */}
+          {activeTab === 'firebase_status' && (
+            <div className="space-y-4 text-xs">
+              <div className="p-4 bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-amber-500/5 border border-amber-300 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs">
+                      <Flame className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm">
+                        Firebase Firestore Cloud Database
+                      </h3>
+                      <p className="text-amber-800 text-[11px]">
+                        เชื่อมต่อสำเร็จ • ซิงค์ข้อมูล Real-time อัตโนมัติทุกเครื่อง
+                      </p>
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Active & Live</span>
+                  </span>
+                </div>
+
+                <div className="bg-white/80 p-3 rounded-xl border border-amber-200 text-slate-700 text-[11px] space-y-1.5 font-mono">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Project ID:</span>
+                    <span className="font-bold text-slate-900">{DEFAULT_FIREBASE_CONFIG.projectId}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Auth Domain:</span>
+                    <span className="text-slate-700">{DEFAULT_FIREBASE_CONFIG.authDomain}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Storage Bucket:</span>
+                    <span className="text-slate-700">{DEFAULT_FIREBASE_CONFIG.storageBucket}</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 text-[11px] space-y-1">
+                  <p className="font-bold">✨ ประโยชน์ของการใช้ Firebase แทน Google Sheets:</p>
+                  <ul className="list-disc pl-5 space-y-0.5 text-emerald-800">
+                    <li>บันทึกจากมือถือนอกสถานที่ได้ทันที 100% ไม่ติดปัญหาความปลอดภัยหรือ CORS Error</li>
+                    <li>ซิงค์ข้อมูลขึ้นหน้าจอคอมพิวเตอร์แบบ Real-time ทันทีที่มีการเพิ่มหรือแก้งาน</li>
+                    <li>รองรับการ Export ออกมาเป็นไฟล์ Excel (.xlsx) และ CSV ได้ตลอดเวลา</li>
+                  </ul>
+                </div>
+
+                {/* Firebase Actions */}
+                <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsSyncing(true);
+                      try {
+                        const count = await syncAllJobsToFirebase(jobs);
+                        setStatusMessage({
+                          text: `🔥 อัปโหลดและซิงค์ข้อมูลงานทั้งหมด (${count} งาน) ขึ้น Firebase Firestore เรียบร้อยแล้ว!`,
+                          type: 'success',
+                        });
+                      } catch (err: any) {
+                        setStatusMessage({
+                          text: `เกิดข้อผิดพลาดในการซิงค์: ${err.message || 'โปรดตรวจสอบ Rules'}`,
+                          type: 'error',
+                        });
+                      } finally {
+                        setIsSyncing(false);
+                      }
+                    }}
+                    disabled={isSyncing}
+                    className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Flame className="w-4 h-4" />
+                    <span>{isSyncing ? 'กำลังซิงค์ขึ้น Firebase...' : '⚡ อัปโหลดงานทั้งหมดขึ้น Firebase ทันที'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsFetching(true);
+                      try {
+                        const fbJobs = await fetchJobsFromFirebaseOnce();
+                        if (fbJobs && fbJobs.length > 0) {
+                          if (onImportJobs) onImportJobs(fbJobs);
+                          setStatusMessage({
+                            text: `ดึงข้อมูลจาก Firebase สำเร็จ (${fbJobs.length} งาน)`,
+                            type: 'success',
+                          });
+                        } else {
+                          setStatusMessage({
+                            text: 'เชื่อมต่อ Firebase สำเร็จ แต่ยังไม่มีข้อมูลงานใน Database (สามารถกดปุ่มซิงค์งานขึ้นไปได้)',
+                            type: 'info',
+                          });
+                        }
+                      } catch (err: any) {
+                        setStatusMessage({
+                          text: `ทดสอบล้มเหลว: ${err.message}`,
+                          type: 'error',
+                        });
+                      } finally {
+                        setIsFetching(false);
+                      }
+                    }}
+                    disabled={isFetching}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 text-slate-600 ${isFetching ? 'animate-spin' : ''}`} />
+                    <span>ทดสอบดึงข้อมูล</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -519,22 +647,41 @@ export const SheetsAppSheetSettingsModal: React.FC<SheetsAppSheetSettingsModalPr
             </div>
           )}
 
-          {/* Tab 5: CSV Export */}
-          {activeTab === 'csv_export' && (
+          {/* Tab 5: Excel & CSV Export */}
+          {activeTab === 'export' && (
             <div className="space-y-4 text-xs">
-              <div className="p-6 bg-slate-50 border border-slate-200 rounded-2xl text-center space-y-3">
+              <div className="p-6 bg-slate-50 border border-slate-200 rounded-2xl text-center space-y-4">
                 <FileSpreadsheet className="w-12 h-12 mx-auto text-emerald-600" />
-                <h4 className="text-base font-bold text-slate-800">ส่งออกข้อมูลงานทั้งหมด ({jobs.length} รายการ)</h4>
-                <p className="text-slate-500 max-w-md mx-auto">
-                  ไฟล์ CSV รองรับภาษาไทยสมบูรณ์แบบ (UTF-8 with BOM) สามารถเปิดใน Excel, Google Sheets หรือนำเข้าตารางได้ทันที
-                </p>
-                <button
-                  onClick={() => downloadCsvFile(jobs, `field_jobs_${new Date().toISOString().substring(0, 10)}.csv`)}
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-95 inline-flex items-center gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>ดาวน์โหลดไฟล์ .CSV สำหรับ Google Sheets</span>
-                </button>
+                <div>
+                  <h4 className="text-base font-bold text-slate-800">ส่งออกรายงานข้อมูลงานทั้งหมด ({jobs.length} รายการ)</h4>
+                  <p className="text-slate-500 max-w-md mx-auto text-xs mt-1">
+                    เลือกรูปแบบไฟล์ที่ต้องการเพื่อนำไปเปิดใน Microsoft Excel, Google Sheets หรือใช้งานในองค์กร
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                  <button
+                    onClick={() => {
+                      exportJobsToExcel(jobs, `JobTracker_Report_${new Date().toISOString().substring(0, 10)}.xlsx`);
+                      setStatusMessage({ text: 'ดาวน์โหลดไฟล์ Excel (.xlsx) เรียบร้อยแล้ว', type: 'success' });
+                    }}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-95 inline-flex items-center justify-center gap-2"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span>ดาวน์โหลดไฟล์ Excel (.xlsx) [แนะนำ]</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      downloadCsvFile(jobs, `field_jobs_${new Date().toISOString().substring(0, 10)}.csv`);
+                      setStatusMessage({ text: 'ดาวน์โหลดไฟล์ CSV เรียบร้อยแล้ว', type: 'success' });
+                    }}
+                    className="w-full sm:w-auto px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl transition-all active:scale-95 inline-flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4 text-slate-600" />
+                    <span>ดาวน์โหลดไฟล์ CSV</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

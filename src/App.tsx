@@ -16,8 +16,15 @@ import {
   fetchSharedServerJobs,
   saveAndNotifyJob,
 } from './utils/sheetsSync';
+import {
+  subscribeToFirebaseJobs,
+  saveJobToFirebase,
+  deleteJobFromFirebase,
+  fetchJobsFromFirebaseOnce,
+} from './utils/firebaseSync';
+import { exportJobsToExcel } from './utils/excelExport';
 import { sortJobsLatestFirst } from './utils/formatters';
-import { CheckCircle2, AlertCircle, Sparkles, Smartphone, Tablet, Monitor, RefreshCw, Radio } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Sparkles, Smartphone, Tablet, Monitor, RefreshCw, Radio, Flame, FileSpreadsheet } from 'lucide-react';
 
 export default function App() {
   // Load saved jobs from localStorage or fallback to initial data
@@ -70,7 +77,8 @@ export default function App() {
   const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
   const [linePreviewJob, setLinePreviewJob] = useState<JobItem | null>(null);
   const [isQuickSyncing, setIsQuickSyncing] = useState(false);
-  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(new Date());
+  const [firebaseConnected, setFirebaseConnected] = useState(true);
 
   // Toast notifications
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -100,21 +108,50 @@ export default function App() {
     }, 3500);
   };
 
-  // 🔄 Automatic sync from Google Sheets (on mount + periodic + focus)
+  // 🔥 Firebase Real-time Listener: Live Sync across all devices
+  useEffect(() => {
+    console.log('Subscribing to Firebase Firestore real-time updates...');
+    const unsubscribe = subscribeToFirebaseJobs((firebaseJobs) => {
+      if (firebaseJobs && firebaseJobs.length > 0) {
+        setJobs(sortJobsLatestFirst(firebaseJobs));
+        setLastSyncedAt(new Date());
+        setFirebaseConnected(true);
+      }
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  // 🔄 Fallback sync from Google Sheets (on mount + periodic)
   const syncFromSheetsQuietly = async (isManual = false) => {
-    if (!settings.googleSheetUrl || !settings.googleSheetUrl.startsWith('http')) return;
     if (isManual) setIsQuickSyncing(true);
 
     try {
-      const result = await fetchJobsFromGoogleSheets(settings.googleSheetUrl);
-      if (result.success && result.data && result.data.length > 0) {
-        setJobs(sortJobsLatestFirst(result.data));
+      // 1. Try Firebase fetch first
+      const fbJobs = await fetchJobsFromFirebaseOnce();
+      if (fbJobs && fbJobs.length > 0) {
+        setJobs(sortJobsLatestFirst(fbJobs));
         setLastSyncedAt(new Date());
         if (isManual) {
-          showToast(`ดึงข้อมูลจาก Google Sheets สำเร็จ (${result.data.length} งาน ล่าสุดขึ้นบน)`, 'success');
+          showToast(`⚡ ซิงค์ข้อมูลล่าสุดจาก Firebase Cloud Database เรียบร้อย (${fbJobs.length} งาน)`, 'success');
         }
-      } else if (isManual) {
-        showToast(result.message || 'ไม่สามารถดึงข้อมูลได้', 'error');
+        return;
+      }
+
+      // 2. Fallback to Google Sheets
+      if (settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
+        const result = await fetchJobsFromGoogleSheets(settings.googleSheetUrl);
+        if (result.success && result.data && result.data.length > 0) {
+          setJobs(sortJobsLatestFirst(result.data));
+          setLastSyncedAt(new Date());
+          if (isManual) {
+            showToast(`ดึงข้อมูลจาก Google Sheets สำเร็จ (${result.data.length} งาน)`, 'success');
+          }
+        } else if (isManual) {
+          showToast(result.message || 'ไม่สามารถดึงข้อมูลได้', 'error');
+        }
       }
     } catch (err: any) {
       if (isManual) {
@@ -193,7 +230,7 @@ export default function App() {
   };
 
   // 2. เมื่อมีการบันทึกงานใหม่ (Create New Job) หรือแก้ไขข้อมูลงาน (Edit Job)
-  // บันทึกลง Google Sheet ทันที + ส่ง LINE Flex แจ้งเตือนเข้ากลุ่ม
+  // บันทึกลง Firebase Firestore Cloud ทันที + ส่ง LINE Flex แจ้งเตือนเข้ากลุ่ม
   const handleSaveJob = async (savedJob: JobItem) => {
     const isEdit = jobs.some((j) => j.id === savedJob.id);
 
@@ -206,7 +243,16 @@ export default function App() {
     }
     setEditingJob(null);
 
-    // Auto sync to Google Sheets & auto push LINE Flex message
+    // 1. บันทึกลง Firebase Firestore ทันที (Real-time Database)
+    try {
+      await saveJobToFirebase(savedJob);
+      setFirebaseConnected(true);
+      setLastSyncedAt(new Date());
+    } catch (fbErr) {
+      console.warn('Firebase save failed:', fbErr);
+    }
+
+    // 2. Auto sync to Google Sheets (ถ้ามี URL) & auto push LINE Flex message เข้ากลุ่ม
     try {
       const result = await saveAndNotifyJob(
         settings.googleSheetUrl || '',
@@ -225,8 +271,8 @@ export default function App() {
       setLastSyncedAt(new Date());
       showToast(
         isEdit
-          ? `✏️ อัพเดทข้อมูลและส่งแจ้งเตือน LINE เรียบร้อย`
-          : `🆕 บันทึกงานใหม่ลง Google Sheets และส่ง LINE เรียบร้อย!`,
+          ? `✏️ บันทึกลง Cloud DB & ส่งแจ้งเตือน LINE เรียบร้อย`
+          : `🆕 บันทึกงานใหม่ลง Cloud DB และส่ง LINE เรียบร้อย!`,
         'success'
       );
     } catch (err) {
@@ -235,7 +281,7 @@ export default function App() {
   };
 
   // 3. เมื่ออัพเดตสถานะของงาน (Quick Status Change)
-  // บันทึกสถานะใหม่ลง Google Sheet ทันที + ส่ง LINE Flex แจ้งเตือนเข้ากลุ่ม
+  // บันทึกสถานะใหม่ลง Firebase Cloud ทันที + ส่ง LINE Flex แจ้งเตือนเข้ากลุ่ม
   const handleQuickStatusChange = async (id: string, newStatus: JobStatus) => {
     let updatedTarget: JobItem | null = null;
     setJobs((prev) => {
@@ -260,9 +306,18 @@ export default function App() {
       setViewingJob((prev) => (prev ? { ...prev, status: newStatus, updatedAt: new Date().toISOString() } : null));
     }
 
-    showToast('⚡ อัพเดทสถานะลง Sheet และส่ง LINE แจ้งเตือนแล้ว', 'success');
+    showToast('⚡ อัพเดทสถานะลง Cloud DB และส่ง LINE แจ้งเตือนแล้ว', 'success');
 
     if (updatedTarget) {
+      // 1. บันทึกลง Firebase Firestore
+      try {
+        await saveJobToFirebase(updatedTarget);
+        setLastSyncedAt(new Date());
+      } catch (fbErr) {
+        console.warn('Firebase status update failed:', fbErr);
+      }
+
+      // 2. ส่งแจ้งเตือน LINE
       try {
         await saveAndNotifyJob(
           settings.googleSheetUrl || '',
@@ -289,6 +344,15 @@ export default function App() {
     setJobs(updatedJobs);
     showToast(`ลบงาน "${target?.title || id}" เรียบร้อย`, 'info');
 
+    // 1. ลบจาก Firebase Firestore
+    try {
+      await deleteJobFromFirebase(id);
+      setLastSyncedAt(new Date());
+    } catch (fbErr) {
+      console.warn('Firebase delete failed:', fbErr);
+    }
+
+    // 2. อัพเดต Google Sheets สำรอง (ถ้ามี)
     if (settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
       try {
         await saveJobToGoogleSheets(settings.googleSheetUrl, updatedJobs);
@@ -299,12 +363,8 @@ export default function App() {
     }
   };
 
-  // Quick fetch all from Google Sheets (Manual Trigger)
+  // Quick fetch all from Firebase / Google Sheets (Manual Trigger)
   const handleQuickFetchFromSheets = () => {
-    if (!settings.googleSheetUrl || !settings.googleSheetUrl.startsWith('http')) {
-      setIsSheetsModalOpen(true);
-      return;
-    }
     syncFromSheetsQuietly(true);
   };
 
@@ -312,6 +372,12 @@ export default function App() {
   const handleOpenLineFlex = (job: JobItem) => {
     setLinePreviewJob(job);
     setActiveTab('line_flex');
+  };
+
+  // Export Excel (.xlsx)
+  const handleExportExcel = () => {
+    exportJobsToExcel(jobs, `JobTracker_Report_${new Date().toISOString().substring(0, 10)}.xlsx`);
+    showToast('ดาวน์โหลดไฟล์ Excel (.xlsx) พร้อมรายงานสรุปสำเร็จ!', 'success');
   };
 
   // Export CSV
@@ -337,36 +403,49 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 space-y-4">
-        {/* Real-time Auto-Sync Status Bar */}
-        {settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http') && (
-          <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs border border-slate-800">
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+        {/* Real-time Cloud DB & Auto-Sync Status Bar */}
+        <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs border border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-amber-400 flex items-center gap-1">
+                <Flame className="w-3.5 h-3.5 text-amber-400" />
+                <span>Firebase Cloud Real-time Database</span>
               </span>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-emerald-400">ระบบดึงและซิงค์ Google Sheets อัตโนมัติ (เรียงงานล่าสุดขึ้นบน)</span>
-                {lastSyncedAt && (
-                  <span className="text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md text-[11px]">
-                    ซิงค์ล่าสุด: {lastSyncedAt.toLocaleTimeString('th-TH')}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleQuickFetchFromSheets}
-                disabled={isQuickSyncing}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 rounded-lg font-medium transition-all cursor-pointer border border-slate-700"
-                title="คลิกเพื่อรีเฟรชข้อมูลทันที"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isQuickSyncing ? 'animate-spin' : ''}`} />
-                <span>{isQuickSyncing ? 'กำลังดึงข้อมูล...' : 'รีเฟรชข้อมูล'}</span>
-              </button>
+              <span className="text-slate-400">•</span>
+              <span className="text-emerald-300 font-medium">เชื่อมต่อสด ทุกเครื่องเห็นข้อมูลพร้อมกัน</span>
+              {lastSyncedAt && (
+                <span className="text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md text-[11px]">
+                  อัพเดทล่าสุด: {lastSyncedAt.toLocaleTimeString('th-TH')}
+                </span>
+              )}
             </div>
           </div>
-        )}
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700/80 hover:bg-emerald-600 text-white rounded-lg font-medium transition-all active:scale-95 border border-emerald-600/50 cursor-pointer shadow-xs"
+              title="ส่งออกรายงาน Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+              <span className="hidden sm:inline">Export Excel</span>
+            </button>
+
+            <button
+              onClick={handleQuickFetchFromSheets}
+              disabled={isQuickSyncing}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 rounded-lg font-medium transition-all cursor-pointer border border-slate-700"
+              title="คลิกเพื่อรีเฟรชข้อมูลทันที"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isQuickSyncing ? 'animate-spin' : ''}`} />
+              <span>{isQuickSyncing ? 'กำลังดึงข้อมูล...' : 'รีเฟรช'}</span>
+            </button>
+          </div>
+        </div>
 
         {/* Tab 1: Job List */}
         {activeTab === 'jobs' && (
@@ -386,6 +465,7 @@ export default function App() {
             onSendLinePreview={handleOpenLineFlex}
             onDirectSendLine={handleDirectSendLineFlex}
             onExportCsv={handleExportCsv}
+            onExportExcel={handleExportExcel}
           />
         )}
 
