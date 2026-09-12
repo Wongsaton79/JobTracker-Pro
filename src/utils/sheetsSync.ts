@@ -1,6 +1,5 @@
-import { JobItem, SyncSettings } from '../types';
+import { JobItem, JobStatus, SyncSettings } from '../types';
 import { formatThaiDate } from './formatters';
-import { buildLineFlexMessage } from './lineFlexBuilder';
 
 export const exportJobsToCsv = (jobs: JobItem[]): string => {
   const headers = [
@@ -186,15 +185,43 @@ function doPost(e) {
 
     var data = JSON.parse(payloadStr);
 
-    // กรณีสั่งส่งเฉพาะ LINE Flex Message
+    // 1. ส่ง LINE Flex Message โดยเฉพาะ (กดส่งเอง หรือ Manual Send)
     if (data && data.action === 'send_line') {
       var target = data.targetId || LINE_TARGET_GROUP_ID || LINE_TARGET_USER_ID;
-      var lineResult = pushLineFlex(target, data.job, data.companyName);
+      var lineResult = pushLineFlex(target, data.job, data.companyName, data.eventLabel || '🔔 รายงานข้อมูลงาน');
       return ContentService.createTextOutput(JSON.stringify({ status: "success", lineResult: lineResult }))
         .setMimeType(ContentService.MimeType.JSON);
     }
+
+    // 2. บันทึกงาน + ส่ง LINE Flex แจ้งเตือน (สร้างงานใหม่ / เปลี่ยนสถานะ / แก้ไขงาน)
+    if (data && data.action === 'save_and_notify') {
+      appendOrUpdateJob(sheet, data.job);
+      
+      var target = data.targetId || LINE_TARGET_GROUP_ID || LINE_TARGET_USER_ID;
+      var eventLabel = data.eventLabel;
+      if (!eventLabel) {
+        if (data.triggerType === 'new_job') {
+          eventLabel = '🆕 บันทึกงานใหม่เข้าระบบ';
+        } else if (data.triggerType === 'status_update') {
+          eventLabel = '⚡ อัพเดทสถานะงานหน้างาน';
+        } else {
+          eventLabel = '📋 อัพเดทข้อมูลงาน';
+        }
+      }
+      
+      if (data.sendLine !== false) {
+        try {
+          pushLineFlex(target, data.job, data.companyName || "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด", eventLabel);
+        } catch (errLine) {
+          Logger.log("LINE push err: " + errLine);
+        }
+      }
+
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", jobCode: data.job.jobCode }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     
-    // หากเป็นการส่งข้อมูลก้อนใหญ่ (Sync ทั้งหมด)
+    // 3. ซิงค์ข้อมูลก้อนใหญ่ทั้งหมด (Bulk Sync)
     if (Array.isArray(data)) {
       data.forEach(function(job) {
         appendOrUpdateJob(sheet, job);
@@ -202,13 +229,12 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "success", count: data.length }))
         .setMimeType(ContentService.MimeType.JSON);
     } 
-    // หากเป็นการส่งทีละงาน (Real-time Save & Auto Push LINE)
+    // 4. บันทึกข้อมูลงานเดี่ยวแบบเดิม (Fallback Direct Job Object)
     else if (data && (data.jobCode || data.title)) {
       appendOrUpdateJob(sheet, data);
       
-      // ส่ง LINE Flex เข้ากลุ่มโดยอัตโนมัติ
       try {
-        pushLineFlex(LINE_TARGET_GROUP_ID || LINE_TARGET_USER_ID, data, "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด");
+        pushLineFlex(LINE_TARGET_GROUP_ID || LINE_TARGET_USER_ID, data, "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด", "🔔 อัพเดทสถานะงานหน้างาน");
       } catch (errLine) {
         Logger.log("LINE push err: " + errLine);
       }
@@ -268,8 +294,8 @@ function appendOrUpdateJob(sheet, job) {
   }
 }
 
-// 💬 ฟังก์ชันส่ง LINE Flex Message เข้า Group หรือ User
-function pushLineFlex(targetId, job, companyName) {
+// 💬 ฟังก์ชันส่ง LINE Flex Message เข้า Group หรือ User พร้อมแถบหัวข้อ Custom
+function pushLineFlex(targetId, job, companyName, headerLabel) {
   if (!LINE_CHANNEL_ACCESS_TOKEN || !targetId) {
     return { error: "Missing LINE Token or Target ID" };
   }
@@ -292,7 +318,8 @@ function pushLineFlex(targetId, job, companyName) {
 
   var status = (job.status || 'pending').toLowerCase();
   var color = statusColors[status] || '#0284C7';
-  var label = statusLabels[status] || 'อัพเดทงาน';
+  var statusBadge = statusLabels[status] || 'อัพเดทงาน';
+  var topHeader = headerLabel || '🔔 อัพเดทสถานะงานหน้างาน';
 
   var heroImage = (job.photos && job.photos.length > 0 && job.photos[0].url && job.photos[0].url.startsWith('http'))
     ? job.photos[0].url
@@ -314,8 +341,8 @@ function pushLineFlex(targetId, job, companyName) {
           "type": "box",
           "layout": "horizontal",
           "contents": [
-            { "type": "text", "text": "🔔 อัพเดทสถานะงานหน้างาน", "weight": "bold", "color": "#FFFFFF", "size": "sm", "flex": 1 },
-            { "type": "text", "text": label, "weight": "bold", "color": "#FFFFFF", "size": "xs", "align": "end" }
+            { "type": "text", "text": topHeader, "weight": "bold", "color": "#FFFFFF", "size": "sm", "flex": 1, "wrap": true },
+            { "type": "text", "text": statusBadge, "weight": "bold", "color": "#FFFFFF", "size": "xs", "align": "end" }
           ]
         },
         { "type": "text", "text": String(job.title || "งานหน้างาน"), "weight": "bold", "color": "#FFFFFF", "size": "lg", "wrap": true, "margin": "md" },
@@ -395,7 +422,7 @@ function pushLineFlex(targetId, job, companyName) {
     "messages": [
       {
         "type": "flex",
-        "altText": "[" + label + "] " + (job.title || "งานหน้างาน"),
+        "altText": "[" + statusBadge + "] " + (job.title || "งานหน้างาน"),
         "contents": flexBubble
       }
     ]
@@ -431,7 +458,7 @@ function testLinePushToGroup() {
     date: "2026-09-12",
     time: "10:30"
   };
-  var result = pushLineFlex(LINE_TARGET_GROUP_ID, sampleJob, "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด");
+  var result = pushLineFlex(LINE_TARGET_GROUP_ID, sampleJob, "บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด", "🧪 ทดสอบส่ง Flex เข้ากลุ่ม");
   Logger.log("Result: " + result);
 }
 `;
@@ -498,7 +525,7 @@ export const saveJobToGoogleSheets = async (
 
     return {
       success: true,
-      message: 'ส่งข้อมูลไปยัง Google Sheets และแจ้งเตือน LINE สำเร็จ',
+      message: 'ส่งข้อมูลไปยัง Google Sheets เรียบร้อย',
     };
   } catch (err: any) {
     return {
@@ -508,17 +535,47 @@ export const saveJobToGoogleSheets = async (
   }
 };
 
+export type JobTriggerType = 'new_job' | 'status_update' | 'edit_job' | 'manual_send';
+
 /**
- * ส่ง LINE Flex Message ผ่าน Google Apps Script Web App
+ * ฟังก์ชันหลัก: บันทึกลง Google Sheets และส่ง LINE Flex Message ตาม Trigger Type
+ * 1. manual_send = กดส่งเอง
+ * 2. new_job = เมื่อมีการบันทึกงานใหม่
+ * 3. status_update = เมื่ออัพเดตสถานะของงาน
+ * 4. edit_job = เมื่อแก้ไขรายละเอียดงาน
  */
-export const sendLineFlexViaAppsScript = async (
+export const saveAndNotifyJob = async (
   webAppUrl: string,
   job: JobItem,
-  targetId: string,
-  companyName: string
+  triggerType: JobTriggerType,
+  options?: {
+    targetId?: string;
+    companyName?: string;
+    customEventLabel?: string;
+    sendLine?: boolean;
+  }
 ): Promise<{ success: boolean; message: string }> => {
   if (!webAppUrl || !webAppUrl.startsWith('http')) {
     return { success: false, message: 'กรุณาระบุ URL Google Apps Script ให้ถูกต้อง' };
+  }
+
+  let eventLabel = options?.customEventLabel;
+  if (!eventLabel) {
+    switch (triggerType) {
+      case 'new_job':
+        eventLabel = '🆕 บันทึกงานใหม่เข้าระบบ';
+        break;
+      case 'status_update':
+        eventLabel = '⚡ อัพเดทสถานะงานหน้างาน';
+        break;
+      case 'edit_job':
+        eventLabel = '✏️ อัพเดทข้อมูลงาน';
+        break;
+      case 'manual_send':
+      default:
+        eventLabel = '📋 รายงานข้อมูลงานหน้างาน';
+        break;
+    }
   }
 
   try {
@@ -529,21 +586,51 @@ export const sendLineFlexViaAppsScript = async (
         'Content-Type': 'text/plain;charset=utf-8',
       },
       body: JSON.stringify({
-        action: 'send_line',
-        targetId: targetId,
+        action: triggerType === 'manual_send' ? 'send_line' : 'save_and_notify',
+        triggerType: triggerType,
         job: job,
-        companyName: companyName,
+        targetId: options?.targetId || 'C341417bcb6e853c320eaf9d80963cda3',
+        companyName: options?.companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
+        eventLabel: eventLabel,
+        sendLine: options?.sendLine !== false,
       }),
     });
 
+    let successMsg = 'บันทึกข้อมูลเข้า Google Sheets และส่ง LINE Flex สำเร็จ!';
+    if (triggerType === 'manual_send') {
+      successMsg = 'ส่ง LINE Flex Message เข้ากลุ่มเรียบร้อยแล้ว!';
+    } else if (triggerType === 'new_job') {
+      successMsg = 'บันทึกงานใหม่ลง Google Sheets และส่งแจ้งเตือนเข้ากลุ่ม LINE เรียบร้อย!';
+    } else if (triggerType === 'status_update') {
+      successMsg = 'อัพเดทสถานะลง Google Sheets และส่ง LINE Flex แจ้งเตือนเข้ากลุ่มแล้ว!';
+    }
+
     return {
       success: true,
-      message: 'ส่งการ์ด LINE Flex Message สำเร็จเรียบร้อย!',
+      message: successMsg,
     };
   } catch (err: any) {
     return {
       success: false,
-      message: `ส่ง LINE Flex ไม่สำเร็จ: ${err.message || err}`,
+      message: `เกิดข้อผิดพลาด: ${err.message || err}`,
     };
   }
+};
+
+/**
+ * ส่ง LINE Flex Message ผ่าน Google Apps Script Web App (สำหรับกดส่งเอง)
+ */
+export const sendLineFlexViaAppsScript = async (
+  webAppUrl: string,
+  job: JobItem,
+  targetId: string,
+  companyName: string,
+  customHeader?: string
+): Promise<{ success: boolean; message: string }> => {
+  return saveAndNotifyJob(webAppUrl, job, 'manual_send', {
+    targetId,
+    companyName,
+    customEventLabel: customHeader || '📋 รายงานข้อมูลงานหน้างาน',
+    sendLine: true,
+  });
 };

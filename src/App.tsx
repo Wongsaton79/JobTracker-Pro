@@ -9,7 +9,12 @@ import { JobDetailModal } from './components/JobDetailModal';
 import { SheetsAppSheetSettingsModal } from './components/SheetsAppSheetSettingsModal';
 import { INITIAL_JOBS, INITIAL_SETTINGS } from './data/initialData';
 import { JobItem, JobStatus, SyncSettings } from './types';
-import { downloadCsvFile, saveJobToGoogleSheets, fetchJobsFromGoogleSheets } from './utils/sheetsSync';
+import {
+  downloadCsvFile,
+  saveJobToGoogleSheets,
+  fetchJobsFromGoogleSheets,
+  saveAndNotifyJob,
+} from './utils/sheetsSync';
 import { CheckCircle2, AlertCircle, Sparkles, Smartphone, Tablet, Monitor, RefreshCw } from 'lucide-react';
 
 export default function App() {
@@ -92,37 +97,65 @@ export default function App() {
     }, 3500);
   };
 
-  // Add or Update Job & Auto Sync to Google Sheets
+  // 1. ฟังก์ชันกดส่งเอง (Direct Manual Send LINE Flex Message เข้า Group)
+  const handleDirectSendLineFlex = async (job: JobItem, customHeader?: string) => {
+    if (!settings.googleSheetUrl || !settings.googleSheetUrl.startsWith('http')) {
+      showToast('กรุณาตั้งค่า Google Sheets Web App URL ก่อนส่ง', 'error');
+      setIsSheetsModalOpen(true);
+      return;
+    }
+
+    showToast(`กำลังส่ง LINE Flex สำหรับ "${job.title}" เข้ากลุ่ม...`, 'info');
+    try {
+      const result = await saveAndNotifyJob(settings.googleSheetUrl, job, 'manual_send', {
+        targetId: settings.lineTargetGroupId || settings.lineTargetUserId,
+        companyName: settings.companyName,
+        customEventLabel: customHeader || '📋 รายงานข้อมูลงานหน้างาน',
+      });
+      if (result.success) {
+        showToast(`💬 ส่ง LINE Flex เข้ากลุ่มเรียบร้อยแล้ว (${job.jobCode})`, 'success');
+      } else {
+        showToast(result.message, 'error');
+      }
+    } catch (err: any) {
+      showToast(`ส่งไม่สำเร็จ: ${err.message || err}`, 'error');
+    }
+  };
+
+  // 2. เมื่อมีการบันทึกงานใหม่ (Create New Job) หรือแก้ไขข้อมูลงาน (Edit Job)
+  // บันทึกลง Google Sheet ทันที + ส่ง LINE Flex แจ้งเตือนเข้ากลุ่ม
   const handleSaveJob = async (savedJob: JobItem) => {
     const isEdit = jobs.some((j) => j.id === savedJob.id);
 
     if (isEdit) {
       setJobs((prev) => prev.map((j) => (j.id === savedJob.id ? savedJob : j)));
-      showToast(`อัพเดทงาน "${savedJob.title}" เรียบร้อยแล้ว`, 'success');
+      showToast(`อัพเดทงาน "${savedJob.title}" เรียบร้อย`, 'success');
     } else {
       setJobs((prev) => [savedJob, ...prev]);
-      showToast(`บันทึกงานใหม่ "${savedJob.title}" สำเร็จ!`, 'success');
+      showToast(`🆕 บันทึกงานใหม่ "${savedJob.title}" สำเร็จ! ส่งแจ้งเตือน LINE แล้ว`, 'success');
     }
     setEditingJob(null);
 
-    // Auto sync to Google Sheets if Web App URL is configured
+    // Auto sync to Google Sheets & auto push LINE Flex message
     if (settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
       try {
-        await saveJobToGoogleSheets(settings.googleSheetUrl, savedJob);
+        await saveAndNotifyJob(
+          settings.googleSheetUrl,
+          savedJob,
+          isEdit ? 'edit_job' : 'new_job',
+          {
+            targetId: settings.lineTargetGroupId || settings.lineTargetUserId,
+            companyName: settings.companyName,
+          }
+        );
       } catch (err) {
-        console.warn('Auto sync to sheets failed:', err);
+        console.warn('Auto sync & notify failed:', err);
       }
     }
   };
 
-  // Delete Job
-  const handleDeleteJob = (id: string) => {
-    const target = jobs.find((j) => j.id === id);
-    setJobs((prev) => prev.filter((j) => j.id !== id));
-    showToast(`ลบงาน "${target?.title || id}" เรียบร้อย`, 'info');
-  };
-
-  // Quick status change & sync
+  // 3. เมื่ออัพเดตสถานะของงาน (Quick Status Change)
+  // บันทึกสถานะใหม่ลง Google Sheet ทันที + ส่ง LINE Flex แจ้งเตือนเข้ากลุ่ม
   const handleQuickStatusChange = async (id: string, newStatus: JobStatus) => {
     let updatedTarget: JobItem | null = null;
     setJobs((prev) =>
@@ -140,13 +173,43 @@ export default function App() {
         return j;
       })
     );
-    showToast('เปลี่ยนสถานะงานเรียบร้อยแล้ว', 'success');
+
+    // Update viewing modal state if currently open
+    if (viewingJob && viewingJob.id === id) {
+      setViewingJob((prev) => (prev ? { ...prev, status: newStatus, updatedAt: new Date().toISOString() } : null));
+    }
+
+    showToast('⚡ อัพเดทสถานะลง Sheet และส่ง LINE แจ้งเตือนแล้ว', 'success');
 
     if (updatedTarget && settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
       try {
-        await saveJobToGoogleSheets(settings.googleSheetUrl, updatedTarget);
+        await saveAndNotifyJob(
+          settings.googleSheetUrl,
+          updatedTarget,
+          'status_update',
+          {
+            targetId: settings.lineTargetGroupId || settings.lineTargetUserId,
+            companyName: settings.companyName,
+          }
+        );
       } catch (err) {
         console.warn('Quick status sync failed:', err);
+      }
+    }
+  };
+
+  // Delete Job
+  const handleDeleteJob = async (id: string) => {
+    const target = jobs.find((j) => j.id === id);
+    const updatedJobs = jobs.filter((j) => j.id !== id);
+    setJobs(updatedJobs);
+    showToast(`ลบงาน "${target?.title || id}" เรียบร้อย`, 'info');
+
+    if (settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
+      try {
+        await saveJobToGoogleSheets(settings.googleSheetUrl, updatedJobs);
+      } catch (err) {
+        console.warn('Delete sync to sheets failed:', err);
       }
     }
   };
@@ -235,6 +298,7 @@ export default function App() {
             onViewDetails={(job) => setViewingJob(job)}
             onQuickStatusChange={handleQuickStatusChange}
             onSendLinePreview={handleOpenLineFlex}
+            onDirectSendLine={handleDirectSendLineFlex}
             onExportCsv={handleExportCsv}
           />
         )}
@@ -325,6 +389,7 @@ export default function App() {
         onDelete={handleDeleteJob}
         onQuickStatusChange={handleQuickStatusChange}
         onSendLinePreview={handleOpenLineFlex}
+        onDirectSendLine={handleDirectSendLineFlex}
       />
 
       {/* Google Sheets Settings Modal */}

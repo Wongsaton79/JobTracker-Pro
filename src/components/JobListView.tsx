@@ -27,6 +27,7 @@ interface JobListViewProps {
   onViewDetails: (job: JobItem) => void;
   onQuickStatusChange: (id: string, status: JobStatus) => void;
   onSendLinePreview: (job: JobItem) => void;
+  onDirectSendLine?: (job: JobItem) => void;
   onExportCsv: () => void;
 }
 
@@ -38,6 +39,7 @@ export const JobListView: React.FC<JobListViewProps> = ({
   onViewDetails,
   onQuickStatusChange,
   onSendLinePreview,
+  onDirectSendLine,
   onExportCsv,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -297,6 +299,7 @@ export const JobListView: React.FC<JobListViewProps> = ({
                 onViewDetails={onViewDetails}
                 onQuickStatusChange={onQuickStatusChange}
                 onSendLinePreview={onSendLinePreview}
+                onDirectSendLine={onDirectSendLine}
               />
             ))}
           </div>
@@ -364,12 +367,21 @@ export const JobListView: React.FC<JobListViewProps> = ({
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1">
+                            {onDirectSendLine && (
+                              <button
+                                onClick={() => onDirectSendLine(job)}
+                                className="px-2 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold rounded text-[11px] transition-colors"
+                                title="ส่ง LINE Flex เข้ากลุ่ม"
+                              >
+                                💬 ส่ง LINE
+                              </button>
+                            )}
                             <button
                               onClick={() => onSendLinePreview(job)}
-                              className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
-                              title="LINE Flex"
+                              className="p-1 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded"
+                              title="ดูตัวอย่าง Flex"
                             >
-                              💬
+                              👁️
                             </button>
                             <button
                               onClick={() => onEdit(job)}
@@ -380,7 +392,7 @@ export const JobListView: React.FC<JobListViewProps> = ({
                             </button>
                             <button
                               onClick={() => onViewDetails(job)}
-                              className="px-2 py-1 bg-slate-800 text-white rounded text-[11px] font-medium"
+                              className="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded text-[11px] font-medium"
                             >
                               ดูงาน
                             </button>

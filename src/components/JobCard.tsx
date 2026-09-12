@@ -25,6 +25,7 @@ interface JobCardProps {
   onViewDetails: (job: JobItem) => void;
   onQuickStatusChange: (id: string, status: JobStatus) => void;
   onSendLinePreview: (job: JobItem) => void;
+  onDirectSendLine?: (job: JobItem) => void;
 }
 
 export const JobCard: React.FC<JobCardProps> = ({
@@ -34,6 +35,7 @@ export const JobCard: React.FC<JobCardProps> = ({
   onViewDetails,
   onQuickStatusChange,
   onSendLinePreview,
+  onDirectSendLine,
 }) => {
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const statusCfg = getStatusConfig(job.status);
@@ -206,15 +208,28 @@ export const JobCard: React.FC<JobCardProps> = ({
 
       {/* Card Action Footer */}
       <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-1 text-xs">
-        <button
-          type="button"
-          onClick={() => onSendLinePreview(job)}
-          className="flex items-center gap-1 px-2.5 py-1 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg font-medium transition-colors border border-emerald-200"
-          title="ดูตัวอย่าง LINE Flex Message"
-        >
-          <Send className="w-3.5 h-3.5" />
-          <span>LINE Flex</span>
-        </button>
+        <div className="flex items-center gap-1">
+          {onDirectSendLine && (
+            <button
+              type="button"
+              onClick={() => onDirectSendLine(job)}
+              className="flex items-center gap-1 px-2.5 py-1 text-emerald-800 bg-emerald-100 hover:bg-emerald-200 rounded-lg font-bold transition-all shadow-2xs active:scale-95 border border-emerald-300"
+              title="กดส่ง LINE Flex Message เข้ากลุ่มช่างทันที"
+            >
+              <Send className="w-3.5 h-3.5 text-emerald-700" />
+              <span>ส่ง LINE</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => onSendLinePreview(job)}
+            className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
+            title="ดูตัวอย่างการ์ด Flex Message"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
         <div className="flex items-center gap-1">
           <button
