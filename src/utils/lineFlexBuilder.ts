@@ -4,14 +4,20 @@ import { formatCurrency, formatThaiDate, getPaymentTypeConfig, getStatusConfig }
 export const buildLineFlexMessage = (job: JobItem, companyName = 'JobTracker Pro') => {
   const statusCfg = getStatusConfig(job.status);
   const paymentCfg = getPaymentTypeConfig(job.paymentType);
-  const heroImage = job.photos.length > 0
-    ? job.photos[0].url
-    : 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80';
+  
+  let heroImage = '';
+  if (job.photos && Array.isArray(job.photos) && job.photos.length > 0) {
+    const firstP = job.photos[0];
+    const rawUrl = typeof firstP === 'string' ? firstP : firstP?.url;
+    if (rawUrl && typeof rawUrl === 'string' && (rawUrl.startsWith('https://') || rawUrl.startsWith('http://'))) {
+      heroImage = rawUrl.replace(/^http:\/\//, 'https://');
+    }
+  }
 
   const mapUrl = `https://www.google.com/maps?q=${job.location.lat},${job.location.lng}`;
   const phoneUri = `tel:${job.phoneNumber.replace(/[^0-9]/g, '')}`;
 
-  const flexJson = {
+  const flexJson: any = {
     type: 'bubble',
     size: 'mega',
     header: {
@@ -59,18 +65,6 @@ export const buildLineFlexMessage = (job: JobItem, companyName = 'JobTracker Pro
           margin: 'xs',
         },
       ],
-    },
-    hero: {
-      type: 'image',
-      url: heroImage,
-      size: 'full',
-      aspectRatio: '20:13',
-      aspectMode: 'cover',
-      action: {
-        type: 'uri',
-        label: 'ดูรูปภาพ',
-        uri: heroImage,
-      },
     },
     body: {
       type: 'box',
@@ -248,6 +242,21 @@ export const buildLineFlexMessage = (job: JobItem, companyName = 'JobTracker Pro
       ],
     },
   };
+
+  if (heroImage && heroImage.startsWith('https://')) {
+    flexJson.hero = {
+      type: 'image',
+      url: heroImage,
+      size: 'full',
+      aspectRatio: '20:13',
+      aspectMode: 'cover',
+      action: {
+        type: 'uri',
+        label: 'ดูรูปภาพหน้างาน',
+        uri: heroImage,
+      },
+    };
+  }
 
   return {
     type: 'flex',

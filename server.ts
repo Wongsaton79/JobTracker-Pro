@@ -32,7 +32,78 @@ if (!fs.existsSync(IMAGES_DIR)) {
 }
 const imageStore = new Map<string, { buffer: Buffer; contentType: string }>();
 
-// Helper to save base64 to server storage and return a public HTTPS URL
+// 🌐 Public Image Serving & Public CDN Integration for LINE Messaging API
+// LINE Messaging API requires images to be served via publicly accessible HTTPS URLs.
+// We upload photos to high-availability public CDNs (ImgBB / FreeImage) and provide local caching.
+
+async function uploadBase64ToPublicCdn(dataUrl: string): Promise<string> {
+  if (!dataUrl || typeof dataUrl !== 'string') return '';
+  if (dataUrl.startsWith('https://i.ibb.co/') || dataUrl.startsWith('https://freeimage.host/')) {
+    return dataUrl;
+  }
+  if (dataUrl.startsWith('https://') && !dataUrl.includes('localhost') && !dataUrl.includes('run.app')) {
+    return dataUrl;
+  }
+
+  const cleanBase64 = dataUrl.replace(/^data:image\/[a-zA-Z0-9\+\-\.]+;base64,/, '');
+  if (!cleanBase64 || cleanBase64.length < 50) return '';
+
+  const imgbbKeys = [
+    '2740a6b7e2898495aa97576403d1591f',
+    'd84fbda79a4ec868aef2eb9d9b62a632',
+    '2788f4b2383ce404ea2aa7742d4a5204',
+  ];
+
+  for (const key of imgbbKeys) {
+    try {
+      const form = new URLSearchParams();
+      form.append('image', cleanBase64);
+      const res = await fetch(`https://api.imgbb.com/1/upload?key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form.toString(),
+      });
+      if (res.ok) {
+        const json = (await res.json()) as any;
+        const finalUrl = json?.data?.image?.url || json?.data?.url || json?.data?.display_url;
+        if (finalUrl && finalUrl.startsWith('https://')) {
+          console.log('✅ Image uploaded to ImgBB CDN:', finalUrl);
+          return finalUrl;
+        }
+      }
+    } catch (err) {
+      console.warn('ImgBB upload attempt error:', err);
+    }
+  }
+
+  // Backup FreeImage.host
+  try {
+    const form = new URLSearchParams();
+    form.append('key', '6d207e02198a847aa98d0a2a901485a5');
+    form.append('action', 'upload');
+    form.append('source', cleanBase64);
+    form.append('format', 'json');
+    const res = await fetch('https://freeimage.host/api/1/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+    });
+    if (res.ok) {
+      const json = (await res.json()) as any;
+      const finalUrl = json?.image?.image?.url || json?.image?.url || json?.image?.display_url;
+      if (finalUrl && finalUrl.startsWith('https://')) {
+        console.log('✅ Image uploaded to FreeImage CDN:', finalUrl);
+        return finalUrl;
+      }
+    }
+  } catch (err) {
+    console.warn('FreeImage upload error:', err);
+  }
+
+  return '';
+}
+
+// Helper to save base64 to server storage
 function saveBase64ImageToServer(dataUrl: string, publicOrigin?: string): string {
   if (!dataUrl || typeof dataUrl !== 'string') return '';
   if (dataUrl.startsWith('https://')) {
@@ -64,7 +135,6 @@ function saveBase64ImageToServer(dataUrl: string, publicOrigin?: string): string
       console.warn('Could not write image to disk:', eDisk);
     }
 
-    // Determine clean public HTTPS origin
     let origin = (publicOrigin || '').trim().replace(/\/+$/, '');
     if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1')) {
       origin = 'https://ais-pre-d2ekaehnc7t3li2cc3z2pg-941526555561.asia-southeast1.run.app';
@@ -82,7 +152,7 @@ function saveBase64ImageToServer(dataUrl: string, publicOrigin?: string): string
   }
 }
 
-// 🌐 Public Image Serving Endpoint for LINE Flex and Google Sheets
+// 🌐 Public Image Serving Endpoint
 app.get('/api/images/:filename', (req, res) => {
   const filename = req.params.filename;
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -109,25 +179,50 @@ app.get('/api/images/:filename', (req, res) => {
   return res.status(404).send('Image Not Found');
 });
 
-// Helper function to process photos inside a job object
-function processJobPhotos(job: any, publicOrigin?: string) {
+// 🌐 Client Upload to Public CDN Endpoint
+app.post('/api/images/upload-cdn', async (req, res) => {
+  const { image } = req.body;
+  if (!image) {
+    return res.status(400).json({ success: false, message: 'No image provided' });
+  }
+  try {
+    const cdnUrl = await uploadBase64ToPublicCdn(image);
+    if (cdnUrl) {
+      return res.json({ success: true, url: cdnUrl });
+    }
+    return res.status(500).json({ success: false, message: 'Upload failed' });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Helper function to process photos inside a job object asynchronously
+async function processJobPhotosAsync(job: any, publicOrigin?: string) {
   if (!job) return job;
   const clonedJob = JSON.parse(JSON.stringify(job));
 
   if (clonedJob.photos && Array.isArray(clonedJob.photos)) {
-    clonedJob.photos = clonedJob.photos.map((photo: any) => {
-      const url = typeof photo === 'string' ? photo : photo?.url;
-      if (url && typeof url === 'string' && url.startsWith('data:image/')) {
-        const publicUrl = saveBase64ImageToServer(url, publicOrigin);
-        if (publicUrl) {
-          if (typeof photo === 'object') {
-            return { ...photo, url: publicUrl };
+    for (let i = 0; i < clonedJob.photos.length; i++) {
+      const photo = clonedJob.photos[i];
+      const rawUrl = typeof photo === 'string' ? photo : photo?.url;
+      if (rawUrl && typeof rawUrl === 'string') {
+        if (rawUrl.startsWith('data:image/')) {
+          // 1. Try public CDN upload first so LINE can fetch it without login cookies
+          let finalUrl = await uploadBase64ToPublicCdn(rawUrl);
+          // 2. Fallback to local server hosting if CDN was unreachable
+          if (!finalUrl) {
+            finalUrl = saveBase64ImageToServer(rawUrl, publicOrigin);
           }
-          return publicUrl;
+          if (finalUrl) {
+            if (typeof photo === 'object') {
+              clonedJob.photos[i].url = finalUrl;
+            } else {
+              clonedJob.photos[i] = finalUrl;
+            }
+          }
         }
       }
-      return photo;
-    });
+    }
   }
   return clonedJob;
 }
@@ -517,7 +612,7 @@ app.post('/api/sync/save-and-notify', async (req, res) => {
     publicOrigin = `${proto}://${req.get('x-forwarded-host')}`;
   }
 
-  const processedJob = processJobPhotos(job, publicOrigin);
+  const processedJob = await processJobPhotosAsync(job, publicOrigin);
 
   // 2. Update server-side shared jobs list
   const existingIdx = sharedJobs.findIndex((j) => j.id === processedJob.id);
@@ -617,7 +712,7 @@ app.post('/api/sync/send-line', async (req, res) => {
     publicOrigin = `${proto}://${req.get('x-forwarded-host')}`;
   }
 
-  const processedJob = processJobPhotos(job, publicOrigin);
+  const processedJob = await processJobPhotosAsync(job, publicOrigin);
 
   const lineToken = channelAccessToken || DEFAULT_LINE_TOKEN;
   const lineTarget = targetId || DEFAULT_LINE_GROUP;

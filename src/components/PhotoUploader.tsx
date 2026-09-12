@@ -55,6 +55,27 @@ const compressImage = (fileOrDataUrl: File | string, maxWidth = 1200, quality = 
   });
 };
 
+// Helper to upload image to public CDN in background
+const uploadImageToCdn = async (dataUrl: string): Promise<string> => {
+  if (!dataUrl || !dataUrl.startsWith('data:image/')) return dataUrl;
+  try {
+    const res = await fetch('/api/images/upload-cdn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: dataUrl }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.url) {
+        return data.url;
+      }
+    }
+  } catch (err) {
+    console.warn('Background upload to CDN failed:', err);
+  }
+  return dataUrl;
+};
+
 export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   photos,
   onChange,
@@ -146,16 +167,25 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
       .toString()
       .padStart(2, '0')}`;
 
+    const newPhotoId = `photo-${Date.now()}`;
     const newPhoto: JobPhoto = {
-      id: `photo-${Date.now()}`,
+      id: newPhotoId,
       url: compressedUrl,
       source: 'camera',
       tag: 'during',
       timestamp: timeStr,
     };
 
-    onChange([...photos, newPhoto]);
+    const updatedList = [...photos, newPhoto];
+    onChange(updatedList);
     stopCamera();
+
+    // Background upload to public CDN for instant LINE & Sheets compatibility
+    uploadImageToCdn(compressedUrl).then((cdnUrl) => {
+      if (cdnUrl && cdnUrl !== compressedUrl) {
+        onChange(updatedList.map((p) => (p.id === newPhotoId ? { ...p, url: cdnUrl } : p)));
+      }
+    });
   };
 
   // Handle files selected from gallery or native file input
@@ -165,6 +195,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
 
     setIsProcessing(true);
     const newPhotosList: JobPhoto[] = [...photos];
+    const newlyAdded: Array<{ id: string; compressedUrl: string }> = [];
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now
       .getMinutes()
@@ -177,13 +208,15 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
       const file: File = filesArray[i];
       try {
         const compressedUrl = await compressImage(file, 1200, 0.78);
+        const pid = `photo-${Date.now()}-${i}`;
         newPhotosList.push({
-          id: `photo-${Date.now()}-${i}`,
+          id: pid,
           url: compressedUrl,
           source: 'gallery',
           tag: 'site_overview',
           timestamp: timeStr,
         });
+        newlyAdded.push({ id: pid, compressedUrl });
       } catch (compressErr) {
         console.warn('Image compression failed:', compressErr);
       }
@@ -192,6 +225,15 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     setIsProcessing(false);
     onChange([...newPhotosList]);
     e.target.value = '';
+
+    // Background CDN upload for all added files
+    newlyAdded.forEach(({ id, compressedUrl }) => {
+      uploadImageToCdn(compressedUrl).then((cdnUrl) => {
+        if (cdnUrl && cdnUrl !== compressedUrl) {
+          onChange(newPhotosList.map((p) => (p.id === id ? { ...p, url: cdnUrl } : p)));
+        }
+      });
+    });
   };
 
   const removePhoto = (id: string) => {
