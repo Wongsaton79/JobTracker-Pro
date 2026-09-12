@@ -26,7 +26,7 @@ import {
   fetchJobsFromFirebaseOnce,
   DEFAULT_FIREBASE_CONFIG,
 } from '../utils/firebaseSync';
-import { sendLineFlexDirect } from '../utils/lineFlexSender';
+import { sendLineFlexDirect, testLineConnectionDirect } from '../utils/lineFlexSender';
 
 interface FirebaseSettingsModalProps {
   isOpen: boolean;
@@ -112,6 +112,55 @@ export const FirebaseSettingsModal: React.FC<FirebaseSettingsModalProps> = ({
     }
   };
 
+  // Test LINE Bot Connection (Quick Ping)
+  const [isTestingBot, setIsTestingBot] = useState(false);
+
+  const handleTestLineBot = async () => {
+    setIsTestingBot(true);
+    setStatusMessage(null);
+
+    const target = (formData.lineTargetGroupId || formData.lineTargetUserId || '').trim();
+    const token = (formData.lineChannelAccessToken || '').trim();
+
+    if (!token) {
+      setStatusMessage({ text: 'กรุณากรอก LINE Channel Access Token ก่อนทดสอบ', type: 'error' });
+      setIsTestingBot(false);
+      return;
+    }
+    if (!target) {
+      setStatusMessage({ text: 'กรุณากรอก LINE Group ID หรือ User ID ก่อนทดสอบ', type: 'error' });
+      setIsTestingBot(false);
+      return;
+    }
+
+    try {
+      const res = await testLineConnectionDirect({
+        targetId: target,
+        channelAccessToken: token,
+        companyName: formData.companyName,
+      });
+
+      if (res.success) {
+        setStatusMessage({
+          text: `✅ ${res.message}`,
+          type: 'success',
+        });
+      } else {
+        setStatusMessage({
+          text: `❌ ${res.message}`,
+          type: 'error',
+        });
+      }
+    } catch (err: any) {
+      setStatusMessage({
+        text: `เกิดข้อผิดพลาด: ${err.message || err}`,
+        type: 'error',
+      });
+    } finally {
+      setIsTestingBot(false);
+    }
+  };
+
   // Test LINE Flex message
   const handleTestLineFlex = async () => {
     if (jobs.length === 0) {
@@ -122,24 +171,36 @@ export const FirebaseSettingsModal: React.FC<FirebaseSettingsModalProps> = ({
     setStatusMessage(null);
 
     const targetJob = jobs[0];
-    const target = formData.lineTargetGroupId || formData.lineTargetUserId || 'C341417bcb6e853c320eaf9d80963cda3';
+    const target = (formData.lineTargetGroupId || formData.lineTargetUserId || '').trim();
+    const token = (formData.lineChannelAccessToken || '').trim();
+
+    if (!token) {
+      setStatusMessage({ text: 'กรุณากรอก LINE Channel Access Token ก่อนทดสอบ', type: 'error' });
+      setIsTestingLine(false);
+      return;
+    }
+    if (!target) {
+      setStatusMessage({ text: 'กรุณากรอก LINE Group ID หรือ User ID ก่อนทดสอบ', type: 'error' });
+      setIsTestingLine(false);
+      return;
+    }
 
     try {
       const res = await sendLineFlexDirect(targetJob, {
         targetId: target,
-        channelAccessToken: formData.lineChannelAccessToken,
+        channelAccessToken: token,
         companyName: formData.companyName,
         eventLabel: '🧪 ทดสอบการส่งข้อความ LINE Flex',
       });
 
       if (res.success) {
         setStatusMessage({
-          text: `💬 ส่ง LINE Flex สำหรับงาน "${targetJob.title}" เข้ากลุ่ม (${target.substring(0, 10)}...) สำเร็จ!`,
+          text: `💬 ส่ง LINE Flex สำหรับงาน "${targetJob.title}" เข้ากลุ่ม (${target.substring(0, 10)}...) สำเร็จเรียบร้อย!`,
           type: 'success',
         });
       } else {
         setStatusMessage({
-          text: res.message || 'ส่งไม่สำเร็จ ตรวจสอบ Channel Access Token หรือ Group ID',
+          text: `❌ ${res.message || 'ส่งไม่สำเร็จ ตรวจสอบ Channel Access Token หรือ Group ID'}`,
           type: 'error',
         });
       }
@@ -379,15 +440,24 @@ export const FirebaseSettingsModal: React.FC<FirebaseSettingsModalProps> = ({
                 />
               </div>
 
-              <div className="pt-2">
+              <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={handleTestLineBot}
+                  disabled={isTestingBot || isTestingLine}
+                  className="flex-1 py-2.5 px-4 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  <span>{isTestingBot ? 'กำลังทดสอบการเชื่อมต่อ...' : '1. ทดสอบเชื่อมต่อ LINE Bot'}</span>
+                </button>
                 <button
                   type="button"
                   onClick={handleTestLineFlex}
-                  disabled={isTestingLine}
-                  className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                  disabled={isTestingLine || isTestingBot}
+                  className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" />
-                  <span>{isTestingLine ? 'กำลังส่งข้อความทดสอบ...' : 'ทดสอบส่ง LINE Flex Message เข้ากลุ่มเดี๋ยวนี้'}</span>
+                  <span>{isTestingLine ? 'กำลังส่งการ์ด Flex...' : '2. ทดสอบส่ง LINE Flex Message'}</span>
                 </button>
               </div>
             </div>

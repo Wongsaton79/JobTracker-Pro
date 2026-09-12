@@ -691,41 +691,111 @@ app.post('/api/sync/save-and-notify', async (req, res) => {
 // 🌟 API ROUTE 2: Direct Send LINE Flex Message
 // ==========================================
 app.post('/api/sync/send-line', async (req, res) => {
-  const { job, targetId, channelAccessToken, companyName, eventLabel, clientOrigin } = req.body;
+  try {
+    const { job, targetId, channelAccessToken, companyName, eventLabel, clientOrigin } = req.body;
 
-  if (!job) {
-    return res.status(400).json({ success: false, message: 'Missing job data' });
+    if (!job) {
+      return res.status(400).json({ success: false, message: 'Missing job data' });
+    }
+
+    let publicOrigin = (clientOrigin || '').trim();
+    if (!publicOrigin && req.get('origin')) {
+      publicOrigin = req.get('origin')!;
+    }
+    if (!publicOrigin && req.get('referer')) {
+      try {
+        const u = new URL(req.get('referer')!);
+        publicOrigin = `${u.protocol}//${u.host}`;
+      } catch {}
+    }
+    if (!publicOrigin && req.get('x-forwarded-host')) {
+      const proto = req.get('x-forwarded-proto') || 'https';
+      publicOrigin = `${proto}://${req.get('x-forwarded-host')}`;
+    }
+
+    const processedJob = await processJobPhotosAsync(job, publicOrigin);
+
+    const lineToken = (channelAccessToken || DEFAULT_LINE_TOKEN).trim();
+    const lineTarget = (targetId || DEFAULT_LINE_GROUP).trim();
+
+    const result = await directPushLineMessage(
+      lineTarget,
+      lineToken,
+      processedJob,
+      companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
+      eventLabel || '📋 รายงานข้อมูลงานหน้างาน'
+    );
+
+    return res.json(result);
+  } catch (err: any) {
+    console.error('Server /api/sync/send-line Exception:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || String(err),
+      message: `เซิร์ฟเวอร์เกิดข้อผิดพลาดในการส่ง LINE: ${err.message || err}`,
+    });
   }
+});
 
-  let publicOrigin = (clientOrigin || '').trim();
-  if (!publicOrigin && req.get('origin')) {
-    publicOrigin = req.get('origin')!;
+// ==========================================
+// 🌟 API ROUTE 3: Direct LINE Connection Test
+// ==========================================
+app.post('/api/sync/test-line', async (req, res) => {
+  try {
+    const { targetId, channelAccessToken, companyName } = req.body;
+    const token = (channelAccessToken || DEFAULT_LINE_TOKEN).trim();
+    const target = (targetId || DEFAULT_LINE_GROUP).trim();
+    const company = (companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด').trim();
+
+    if (!token) {
+      return res.json({ success: false, message: 'กรุณากรอก LINE Channel Access Token' });
+    }
+    if (!target) {
+      return res.json({ success: false, message: 'กรุณากรอก LINE Group ID หรือ User ID' });
+    }
+
+    const testTime = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+    const textMsg = `🧪 ทดสอบการเชื่อมต่อ LINE Messaging API สำเร็จ!\n🏢 บริษัท: ${company}\n⏰ เวลา: ${testTime}\n📱 รหัสผู้รับ: ${target}\n✨ ระบบพร้อมส่งการแจ้งเตือนงานหน้างาน (Flex Message & Photos) เรียบร้อยแล้วครับ`;
+
+    const response = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        to: target,
+        messages: [{ type: 'text', text: textMsg }],
+      }),
+    });
+
+    const responseText = await response.text();
+    if (response.ok) {
+      return res.json({
+        success: true,
+        status: 200,
+        message: `ส่งข้อความทดสอบเข้า LINE เรียบร้อยแล้ว (${target.substring(0, 10)}...)`,
+      });
+    } else {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(responseText);
+      } catch {}
+      return res.json({
+        success: false,
+        status: response.status,
+        error: responseText,
+        message: parsed?.message || responseText,
+      });
+    }
+  } catch (err: any) {
+    console.error('Server /api/sync/test-line Exception:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || String(err),
+      message: `ไม่สามารถส่งข้อความทดสอบได้: ${err.message || err}`,
+    });
   }
-  if (!publicOrigin && req.get('referer')) {
-    try {
-      const u = new URL(req.get('referer')!);
-      publicOrigin = `${u.protocol}//${u.host}`;
-    } catch {}
-  }
-  if (!publicOrigin && req.get('x-forwarded-host')) {
-    const proto = req.get('x-forwarded-proto') || 'https';
-    publicOrigin = `${proto}://${req.get('x-forwarded-host')}`;
-  }
-
-  const processedJob = await processJobPhotosAsync(job, publicOrigin);
-
-  const lineToken = channelAccessToken || DEFAULT_LINE_TOKEN;
-  const lineTarget = targetId || DEFAULT_LINE_GROUP;
-
-  const result = await directPushLineMessage(
-    lineTarget,
-    lineToken,
-    processedJob,
-    companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
-    eventLabel || '📋 รายงานข้อมูลงานหน้างาน'
-  );
-
-  return res.json(result);
 });
 
 // ==========================================

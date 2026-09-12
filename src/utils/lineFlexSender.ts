@@ -17,28 +17,17 @@ export const DEFAULT_LINE_CONFIG = {
   companyName: 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
 };
 
-// List of backend relay endpoints to bypass browser CORS on LINE API
-const RELAY_ENDPOINTS = [
-  // 1. Local / Relative endpoint
-  '/api/sync/send-line',
-  // 2. Production Cloud Run backend
-  'https://ais-pre-d2ekaehnc7t3li2cc3z2pg-941526555561.asia-southeast1.run.app/api/sync/send-line',
-  // 3. Dev Cloud Run backend
-  'https://ais-dev-d2ekaehnc7t3li2cc3z2pg-941526555561.asia-southeast1.run.app/api/sync/send-line',
-];
-
 /**
  * Direct Send LINE Flex Message to LINE Messaging API
- * 1. Ensures all job photos are uploaded to public CDN HTTPS URLs
- * 2. Sends via resilient multi-tier backend proxy to bypass browser CORS restrictions
- * 3. Supports fallbacks and clean error diagnostics
+ * 1. Ensures all job photos are converted to public HTTPS URLs
+ * 2. Uses robust relay endpoints with comprehensive error reporting
  */
 export async function sendLineFlexDirect(
   job: JobItem,
   options?: Partial<SendLineFlexOptions>
 ): Promise<{ success: boolean; message: string; data?: any; job?: JobItem }> {
   try {
-    // 1. Convert any base64 photo to public HTTPS CDN url first
+    // 1. Process photos
     const processedJob = await ensureJobPhotosPublicUrls(job);
 
     const token = (options?.channelAccessToken || DEFAULT_LINE_CONFIG.channelAccessToken).trim();
@@ -71,11 +60,18 @@ export async function sendLineFlexDirect(
       clientOrigin: typeof window !== 'undefined' ? window.location.origin : '',
     };
 
-    // 2. Multi-tier proxy dispatch (Bypasses browser CORS on api.line.me)
-    for (const endpoint of RELAY_ENDPOINTS) {
+    // 2. Build candidate endpoints
+    const endpoints: string[] = ['/api/sync/send-line'];
+    if (typeof window !== 'undefined' && window.location.origin) {
+      endpoints.push(`${window.location.origin}/api/sync/send-line`);
+    }
+
+    let lastErrorMessage = '';
+
+    for (const endpoint of endpoints) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
         const response = await fetch(endpoint, {
           method: 'POST',
@@ -88,31 +84,38 @@ export async function sendLineFlexDirect(
         });
         clearTimeout(timeoutId);
 
-        if (response.ok) {
-          const json = await response.json();
-          if (json.success) {
-            return {
-              success: true,
-              message: json.message || 'ส่ง LINE Flex Message เรียบร้อยแล้ว',
-              data: json,
-              job: processedJob,
-            };
-          } else if (json.error) {
-            // LINE API specific error returned from backend
-            return {
-              success: false,
-              message: formatLineApiError(json.error),
-              data: json,
-              job: processedJob,
-            };
-          }
+        const responseText = await response.text();
+        let json: any = null;
+        try {
+          json = JSON.parse(responseText);
+        } catch {
+          json = { raw: responseText };
         }
-      } catch (endpointErr) {
-        console.warn(`Relay endpoint ${endpoint} failed, trying next...`, endpointErr);
+
+        if (response.ok && json?.success) {
+          return {
+            success: true,
+            message: json.message || 'ส่ง LINE Flex Message เรียบร้อยแล้ว',
+            data: json,
+            job: processedJob,
+          };
+        }
+
+        if (json?.error || json?.message) {
+          lastErrorMessage = formatLineApiError(json.error || json.message);
+          return {
+            success: false,
+            message: lastErrorMessage,
+            data: json,
+            job: processedJob,
+          };
+        }
+      } catch (endpointErr: any) {
+        lastErrorMessage = endpointErr?.message || String(endpointErr);
       }
     }
 
-    // 3. Fallback: Public CORS Bridge for pure static deployments
+    // 3. Fallback: Direct Push using built-in Flex Payload (with CORS proxy if needed)
     try {
       const flexPayload = buildLineFlexMessage(processedJob, company);
       const lineBody = JSON.stringify({
@@ -120,8 +123,8 @@ export async function sendLineFlexDirect(
         messages: [flexPayload],
       });
 
-      const corsProxyUrl = `https://corsproxy.io/?url=${encodeURIComponent('https://api.line.me/v2/bot/message/push')}`;
-      const proxyRes = await fetch(corsProxyUrl, {
+      // Try direct call first (in case environment permits or serverless proxy)
+      const directRes = await fetch('https://api.line.me/v2/bot/message/push', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -130,27 +133,29 @@ export async function sendLineFlexDirect(
         body: lineBody,
       });
 
-      if (proxyRes.ok) {
+      if (directRes.ok) {
         return {
           success: true,
           message: 'ส่ง LINE Flex Message สำเร็จเรียบร้อย!',
           job: processedJob,
         };
       } else {
-        const errText = await proxyRes.text();
+        const errText = await directRes.text();
         return {
           success: false,
-          message: formatLineApiError(errText || proxyRes.statusText),
+          message: formatLineApiError(errText || directRes.statusText),
           job: processedJob,
         };
       }
-    } catch (corsErr: any) {
-      console.warn('CORS bridge fallback failed:', corsErr);
+    } catch {
+      // Browser blocked direct CORS to api.line.me
     }
 
     return {
       success: false,
-      message: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ส่ง LINE ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต',
+      message: lastErrorMessage
+        ? `ไม่สามารถส่ง LINE ได้: ${lastErrorMessage}`
+        : 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ส่ง LINE ได้ กรุณาตรวจสอบ Channel Access Token หรือ Group ID',
       job: processedJob,
     };
   } catch (err: any) {
@@ -163,26 +168,104 @@ export async function sendLineFlexDirect(
 }
 
 /**
+ * Test LINE Bot connection directly
+ */
+export async function testLineConnectionDirect(options: {
+  targetId: string;
+  channelAccessToken: string;
+  companyName?: string;
+}): Promise<{ success: boolean; message: string }> {
+  const token = (options.channelAccessToken || DEFAULT_LINE_CONFIG.channelAccessToken).trim();
+  const target = (options.targetId || DEFAULT_LINE_CONFIG.targetGroupId).trim();
+  const company = (options.companyName || DEFAULT_LINE_CONFIG.companyName).trim();
+
+  if (!token) {
+    return { success: false, message: 'กรุณากรอก LINE Channel Access Token ในหน้าตั้งค่า' };
+  }
+  if (!target) {
+    return { success: false, message: 'กรุณากรอก LINE Group ID หรือ User ID' };
+  }
+
+  // 1. Try local server test endpoint
+  const endpoints = ['/api/sync/test-line'];
+  if (typeof window !== 'undefined' && window.location.origin) {
+    endpoints.push(`${window.location.origin}/api/sync/test-line`);
+  }
+
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ targetId: target, channelAccessToken: token, companyName: company }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        return { success: true, message: data.message || 'ทดสอบเชื่อมต่อ LINE สำเร็จ ข้อความถูกส่งเข้ากลุ่มแล้ว!' };
+      } else if (data.error || data.message) {
+        return { success: false, message: formatLineApiError(data.error || data.message) };
+      }
+    } catch {}
+  }
+
+  // 2. Direct fallback
+  try {
+    const testMsg = `🧪 ทดสอบการเชื่อมต่อ LINE Bot สำเร็จ!\n🏢 บริษัท: ${company}\n⏰ เวลา: ${new Date().toLocaleString('th-TH')}`;
+    const directRes = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        to: target,
+        messages: [{ type: 'text', text: testMsg }],
+      }),
+    });
+    if (directRes.ok) {
+      return { success: true, message: 'ส่งข้อความทดสอบเข้า LINE สำเร็จเรียบร้อย!' };
+    }
+    const errText = await directRes.text();
+    return { success: false, message: formatLineApiError(errText) };
+  } catch (e: any) {
+    return {
+      success: false,
+      message: `ไม่สามารถเชื่อมต่อ LINE API: ${e.message || 'กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต'}`,
+    };
+  }
+}
+
+/**
  * Formats LINE API error responses into user-friendly Thai explanations
  */
-function formatLineApiError(rawError: string): string {
+export function formatLineApiError(rawError: any): string {
+  if (!rawError) return 'เกิดข้อผิดพลาดในการส่งข้อความ LINE';
   try {
     const parsed = typeof rawError === 'string' ? JSON.parse(rawError) : rawError;
-    const msg = parsed?.message || rawError;
+    const msg = parsed?.message || parsed?.error || (typeof rawError === 'string' ? rawError : JSON.stringify(rawError));
 
-    if (msg.includes('Invalid reply token') || msg.includes('authentication failed') || msg.includes('401')) {
-      return 'LINE Channel Access Token ไม่ถูกต้องหรือหมดอายุ (401 Unauthorized)';
+    if (
+      msg.includes('Invalid reply token') ||
+      msg.includes('authentication failed') ||
+      msg.includes('401') ||
+      msg.includes('Unauthorized')
+    ) {
+      return 'LINE Channel Access Token ไม่ถูกต้องหรือหมดอายุ (401 Unauthorized) กรุณาตรวจสอบหรือ Issue Token ใหม่ใน LINE Developers Console';
     }
-    if (msg.includes('Failed to send message') || msg.includes('400')) {
-      return 'รูปแบบข้อความ Flex หรือ Group ID ไม่ถูกต้อง กรุณาเชิญบอทเข้ากลุ่มก่อนส่ง';
+    if (msg.includes('The property, \'to\', in the request body is invalid') || msg.includes('Failed to send message')) {
+      return 'Group ID หรือ User ID ไม่ถูกต้อง หรือ LINE Bot ยังไม่ได้ถูกเชิญเข้าร่วมกลุ่ม (400 Bad Request)';
     }
     if (msg.includes('Not found') || msg.includes('404')) {
-      return 'ไม่พบห้องหรือผู้รับ (Group/User ID ไม่ถูกต้อง หรือยังไม่ได้เชิญ Bot เข้ากลุ่ม)';
+      return 'ไม่พบห้องหรือผู้รับ (Group ID ไม่ถูกต้อง หรือ Bot ถูกเตะออกจากกลุ่มแล้ว)';
+    }
+    if (msg.includes('quota') || msg.includes('429')) {
+      return 'ส่งข้อความเกินโควตาฟรีประจำเดือนของ LINE Official Account (429 Rate Limit)';
     }
     return `LINE API ตอบกลับ: ${msg}`;
   } catch {
-    if (rawError.includes('401')) return 'LINE Channel Access Token ไม่ถูกต้องหรือหมดอายุ';
-    if (rawError.includes('400')) return 'ไม่สามารถส่งข้อความได้ กรุณาตรวจสอบว่าเชิญบอทเข้ากลุ่มแล้วหรือยัง';
-    return `LINE API: ${rawError}`;
+    const str = String(rawError);
+    if (str.includes('401')) return 'LINE Channel Access Token ไม่ถูกต้องหรือหมดอายุ (401)';
+    if (str.includes('400')) return 'Group ID ไม่ถูกต้อง หรือ LINE Bot ยังไม่ได้ถูกเชิญเข้าร่วมกลุ่ม (400)';
+    return `LINE API: ${str}`;
   }
 }
