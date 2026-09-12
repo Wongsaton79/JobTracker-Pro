@@ -28,10 +28,15 @@ export default function App() {
 
   // Load saved settings from localStorage
   const [settings, setSettings] = useState<SyncSettings>(() => {
+    const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzZGiyeLCwTUxLFG0NTrU2GFhz2kvmyS1BQaYqHil-jDpcnNwPtu1U8LPZtGmJypEHZ/exec';
     try {
       const saved = localStorage.getItem('field_tracker_settings');
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (!parsed.googleSheetUrl || parsed.googleSheetUrl.includes('docs.google.com/spreadsheets/d/1Example')) {
+          parsed.googleSheetUrl = DEFAULT_APPS_SCRIPT_URL;
+        }
+        return parsed;
       }
     } catch (e) {
       console.warn('Failed to parse localStorage settings:', e);

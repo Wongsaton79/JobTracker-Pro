@@ -2,8 +2,8 @@ import { JobItem, SyncSettings } from '../types';
 
 export const INITIAL_SETTINGS: SyncSettings = {
   companyName: 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
-  googleSheetUrl: 'https://docs.google.com/spreadsheets/d/1ExampleFieldJobDataSheet2026/edit',
-  appSheetWebhookUrl: 'https://api.appsheet.com/api/v2/apps/field-tracker-app/tables/Jobs/Action',
+  googleSheetUrl: 'https://script.google.com/macros/s/AKfycbzZGiyeLCwTUxLFG0NTrU2GFhz2kvmyS1BQaYqHil-jDpcnNwPtu1U8LPZtGmJypEHZ/exec',
+  appSheetWebhookUrl: '',
   lineNotifyToken: '',
   lineChannelAccessToken: '',
   lineTargetUserId: '',
