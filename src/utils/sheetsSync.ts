@@ -724,6 +724,24 @@ export const saveJobToGoogleSheets = async (
 export type JobTriggerType = 'new_job' | 'status_update' | 'edit_job' | 'manual_send';
 
 /**
+ * ดึงข้อมูลงานที่ซิงค์ส่วนกลางจาก Server (Sync ระหว่างมือถือและคอมพิวเตอร์)
+ */
+export const fetchSharedServerJobs = async (): Promise<JobItem[] | null> => {
+  try {
+    const res = await fetch('/api/jobs');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+        return data.data;
+      }
+    }
+  } catch (err) {
+    // silently ignore if offline
+  }
+  return null;
+};
+
+/**
  * ฟังก์ชันหลัก: บันทึกลง Google Sheets และส่ง LINE Flex Message ตาม Trigger Type
  * 1. manual_send = กดส่งเอง
  * 2. new_job = เมื่อมีการบันทึกงานใหม่
@@ -741,7 +759,7 @@ export const saveAndNotifyJob = async (
     customEventLabel?: string;
     sendLine?: boolean;
   }
-): Promise<{ success: boolean; message: string; details?: any }> => {
+): Promise<{ success: boolean; message: string; job?: JobItem; details?: any }> => {
   let eventLabel = options?.customEventLabel;
   if (!eventLabel) {
     switch (triggerType) {
@@ -774,8 +792,9 @@ export const saveAndNotifyJob = async (
 
   let serverSuccess = false;
   let serverDetails: any = null;
+  let updatedJob: JobItem = job;
 
-  // 1. Try server-side proxy first (direct LINE API + Sheets dispatch)
+  // 1. Try server-side proxy first (direct LINE API + Sheets dispatch + Image hosting)
   try {
     const response = await fetch('/api/sync/save-and-notify', {
       method: 'POST',
@@ -789,13 +808,16 @@ export const saveAndNotifyJob = async (
       const data = await response.json();
       serverSuccess = true;
       serverDetails = data.details;
+      if (data.job) {
+        updatedJob = data.job;
+      }
     }
   } catch (err) {
     console.warn('Server-side sync endpoint unreachable, falling back to direct client post:', err);
   }
 
-  // 2. Direct client fallback to Google Apps Script if webAppUrl is provided
-  if (webAppUrl && webAppUrl.startsWith('http')) {
+  // 2. Direct client fallback to Google Apps Script if webAppUrl is provided and server call failed
+  if (!serverSuccess && webAppUrl && webAppUrl.startsWith('http')) {
     try {
       await fetch(webAppUrl, {
         method: 'POST',
@@ -806,7 +828,7 @@ export const saveAndNotifyJob = async (
         body: JSON.stringify({
           action: triggerType === 'manual_send' ? 'send_line' : 'save_and_notify',
           triggerType: triggerType,
-          job: job,
+          job: updatedJob,
           targetId: options?.targetId || 'C341417bcb6e853c320eaf9d80963cda3',
           channelAccessToken: options?.channelAccessToken,
           companyName: options?.companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
@@ -831,6 +853,7 @@ export const saveAndNotifyJob = async (
   return {
     success: true,
     message: successMsg,
+    job: updatedJob,
     details: serverDetails,
   };
 };

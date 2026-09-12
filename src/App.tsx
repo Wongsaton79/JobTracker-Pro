@@ -13,6 +13,7 @@ import {
   downloadCsvFile,
   saveJobToGoogleSheets,
   fetchJobsFromGoogleSheets,
+  fetchSharedServerJobs,
   saveAndNotifyJob,
 } from './utils/sheetsSync';
 import { sortJobsLatestFirst } from './utils/formatters';
@@ -126,6 +127,14 @@ export default function App() {
 
   // Initial auto-fetch on mount & whenever URL changes
   useEffect(() => {
+    // 1. Fetch shared jobs from server cache (cross-device sync)
+    fetchSharedServerJobs().then((serverJobs) => {
+      if (serverJobs && serverJobs.length > 0) {
+        setJobs(sortJobsLatestFirst(serverJobs));
+      }
+    });
+
+    // 2. Fetch from Google Sheets
     if (settings.googleSheetUrl && settings.googleSheetUrl.startsWith('http')) {
       syncFromSheetsQuietly(false);
     }
@@ -139,6 +148,11 @@ export default function App() {
 
     const handleFocus = () => {
       syncFromSheetsQuietly(false);
+      fetchSharedServerJobs().then((serverJobs) => {
+        if (serverJobs && serverJobs.length > 0) {
+          setJobs(sortJobsLatestFirst(serverJobs));
+        }
+      });
     };
 
     window.addEventListener('focus', handleFocus);
@@ -166,6 +180,9 @@ export default function App() {
         sendLine: true,
       });
       if (result.success) {
+        if (result.job) {
+          setJobs((prev) => sortJobsLatestFirst(prev.map((j) => (j.id === result.job!.id ? result.job! : j))));
+        }
         showToast(`💬 ส่ง LINE Flex เข้ากลุ่มเรียบร้อยแล้ว (${job.jobCode})`, 'success');
       } else {
         showToast(result.message, 'error');
@@ -182,16 +199,16 @@ export default function App() {
 
     if (isEdit) {
       setJobs((prev) => sortJobsLatestFirst(prev.map((j) => (j.id === savedJob.id ? savedJob : j))));
-      showToast(`อัพเดทงาน "${savedJob.title}" เรียบร้อย`, 'success');
+      showToast(`กำลังบันทึกและส่งข้อมูลงาน "${savedJob.title}"...`, 'info');
     } else {
       setJobs((prev) => sortJobsLatestFirst([savedJob, ...prev]));
-      showToast(`🆕 บันทึกงานใหม่ "${savedJob.title}" สำเร็จ! ส่งแจ้งเตือน LINE แล้ว`, 'success');
+      showToast(`กำลังบันทึกงานใหม่ "${savedJob.title}" และส่ง LINE...`, 'info');
     }
     setEditingJob(null);
 
     // Auto sync to Google Sheets & auto push LINE Flex message
     try {
-      await saveAndNotifyJob(
+      const result = await saveAndNotifyJob(
         settings.googleSheetUrl || '',
         savedJob,
         isEdit ? 'edit_job' : 'new_job',
@@ -202,7 +219,16 @@ export default function App() {
           sendLine: true,
         }
       );
+      if (result.job) {
+        setJobs((prev) => sortJobsLatestFirst(prev.map((j) => (j.id === result.job!.id ? result.job! : j))));
+      }
       setLastSyncedAt(new Date());
+      showToast(
+        isEdit
+          ? `✏️ อัพเดทข้อมูลและส่งแจ้งเตือน LINE เรียบร้อย`
+          : `🆕 บันทึกงานใหม่ลง Google Sheets และส่ง LINE เรียบร้อย!`,
+        'success'
+      );
     } catch (err) {
       console.warn('Auto sync & notify failed:', err);
     }

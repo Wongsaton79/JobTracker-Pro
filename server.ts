@@ -1,9 +1,22 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
+import os from 'os';
 import { createServer as createViteServer } from 'vite';
 
 const app = express();
 const PORT = 3000;
+
+// CORS Middleware to ensure requests from all devices/origins succeed
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -11,6 +24,104 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 const DEFAULT_LINE_TOKEN =
   'JOdpOQkd0rtaYfPfGVLwZj9LMshtp010Hgb5DsM9HmRmtDWqrSJFTVjXLd6mLmhS3bCmWfTIKeHkC3yhWVMGXKP/R7HhnWEizWvqnxi8EWa/jMVUKxz1mck/P+8/LvTaHJl/Fpq0P7Okf547iIlW2wdB04t89/1O/w1cDnyilFU=';
 const DEFAULT_LINE_GROUP = 'C341417bcb6e853c320eaf9d80963cda3';
+
+// 📸 Directory and In-Memory Cache for uploaded photos
+const IMAGES_DIR = path.join(os.tmpdir(), 'jobtracker_photos');
+if (!fs.existsSync(IMAGES_DIR)) {
+  fs.mkdirSync(IMAGES_DIR, { recursive: true });
+}
+const imageStore = new Map<string, { buffer: Buffer; contentType: string }>();
+
+// Helper to save base64 to server storage and return a public HTTPS URL
+function saveBase64ImageToServer(dataUrl: string, host: string, proto = 'https'): string {
+  if (!dataUrl || typeof dataUrl !== 'string') return '';
+  if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) {
+    return dataUrl;
+  }
+
+  try {
+    const matches = dataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return '';
+    }
+
+    const contentType = matches[1] || 'image/jpeg';
+    const buffer = Buffer.from(matches[2], 'base64');
+    const imageId = `photo_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const ext = contentType.includes('png') ? 'png' : 'jpg';
+    const filename = `${imageId}.${ext}`;
+
+    // Store in memory
+    imageStore.set(filename, { buffer, contentType });
+
+    // Store on disk
+    try {
+      fs.writeFileSync(path.join(IMAGES_DIR, filename), buffer);
+    } catch (eDisk) {
+      console.warn('Could not write image to disk:', eDisk);
+    }
+
+    // Determine public URL
+    const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+    const cleanHost = host.replace(/:\d+$/, (port) =>
+      port === ':3000' || port === ':80' || port === ':443' ? '' : port
+    );
+    const scheme = isLocal ? 'http' : proto;
+
+    return `${scheme}://${cleanHost || host}/api/images/${filename}`;
+  } catch (err) {
+    console.error('saveBase64ImageToServer error:', err);
+    return '';
+  }
+}
+
+// 🌐 Public Image Serving Endpoint for LINE Flex and Google Sheets
+app.get('/api/images/:filename', (req, res) => {
+  const filename = req.params.filename;
+
+  // 1. From Memory
+  const mem = imageStore.get(filename);
+  if (mem) {
+    res.setHeader('Content-Type', mem.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.send(mem.buffer);
+  }
+
+  // 2. From Disk
+  const diskPath = path.join(IMAGES_DIR, filename);
+  if (fs.existsSync(diskPath)) {
+    const ext = path.extname(filename).toLowerCase();
+    const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.sendFile(diskPath);
+  }
+
+  return res.status(404).send('Image Not Found');
+});
+
+// Helper function to process photos inside a job object
+function processJobPhotos(job: any, host: string, proto: string) {
+  if (!job) return job;
+  const clonedJob = JSON.parse(JSON.stringify(job));
+
+  if (clonedJob.photos && Array.isArray(clonedJob.photos)) {
+    clonedJob.photos = clonedJob.photos.map((photo: any) => {
+      const url = typeof photo === 'string' ? photo : photo.url;
+      if (url && typeof url === 'string' && url.startsWith('data:image/')) {
+        const publicUrl = saveBase64ImageToServer(url, host, proto);
+        if (publicUrl) {
+          if (typeof photo === 'object') {
+            return { ...photo, url: publicUrl };
+          }
+          return publicUrl;
+        }
+      }
+      return photo;
+    });
+  }
+  return clonedJob;
+}
 
 // Helper function to build LINE Flex Bubble JSON
 function buildLineFlexPayload(job: any, companyName: string, eventLabel: string) {
@@ -35,10 +146,19 @@ function buildLineFlexPayload(job: any, companyName: string, eventLabel: string)
   const statusBadge = statusLabels[status] || 'อัพเดทงาน';
   const topHeader = eventLabel || '🔔 อัพเดทสถานะงานหน้างาน';
 
-  const heroImage =
-    job.photos && job.photos.length > 0 && job.photos[0].url && job.photos[0].url.startsWith('http')
-      ? job.photos[0].url
-      : 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80';
+  let heroImage = '';
+  if (job.photos && job.photos.length > 0) {
+    const firstP = job.photos[0];
+    const url = typeof firstP === 'string' ? firstP : firstP.url;
+    if (url && typeof url === 'string' && url.startsWith('http')) {
+      heroImage = url;
+    }
+  }
+
+  if (!heroImage) {
+    heroImage =
+      'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80';
+  }
 
   const mapUrl = job.location
     ? `https://www.google.com/maps?q=${job.location.lat},${job.location.lng}`
@@ -287,6 +407,35 @@ async function sendToGoogleAppsScript(url: string, payload: any) {
   }
 }
 
+// Persistent shared jobs storage on server (Cross-Device Sync)
+const JOBS_FILE = path.join(os.tmpdir(), 'jobtracker_jobs.json');
+let sharedJobs: any[] = [];
+try {
+  if (fs.existsSync(JOBS_FILE)) {
+    sharedJobs = JSON.parse(fs.readFileSync(JOBS_FILE, 'utf-8'));
+  }
+} catch (e) {
+  console.warn('Could not read shared jobs file:', e);
+}
+
+// ==========================================
+// 🌟 API ROUTE: Shared Jobs (Sync Mobile & PC)
+// ==========================================
+app.get('/api/jobs', (req, res) => {
+  return res.json({ success: true, data: sharedJobs });
+});
+
+app.post('/api/jobs', (req, res) => {
+  const { jobs } = req.body;
+  if (Array.isArray(jobs)) {
+    sharedJobs = jobs;
+    try {
+      fs.writeFileSync(JOBS_FILE, JSON.stringify(sharedJobs));
+    } catch (e) {}
+  }
+  return res.json({ success: true, count: sharedJobs.length });
+});
+
 // ==========================================
 // 🌟 API ROUTE 1: Save Job & Notify LINE
 // ==========================================
@@ -296,6 +445,22 @@ app.post('/api/sync/save-and-notify', async (req, res) => {
   if (!job) {
     return res.status(400).json({ success: false, message: 'Missing job data' });
   }
+
+  // 1. Convert any base64 images to permanent public HTTPS URLs
+  const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:3000';
+  const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
+  const processedJob = processJobPhotos(job, host, proto);
+
+  // 2. Update server-side shared jobs list
+  const existingIdx = sharedJobs.findIndex((j) => j.id === processedJob.id);
+  if (existingIdx >= 0) {
+    sharedJobs[existingIdx] = processedJob;
+  } else {
+    sharedJobs.unshift(processedJob);
+  }
+  try {
+    fs.writeFileSync(JOBS_FILE, JSON.stringify(sharedJobs));
+  } catch (e) {}
 
   let eventLabel = customEventLabel;
   if (!eventLabel) {
@@ -322,12 +487,12 @@ app.post('/api/sync/save-and-notify', async (req, res) => {
     lineSync: null,
   };
 
-  // 1. Sync to Google Sheets (if webAppUrl is provided)
+  // 3. Sync to Google Sheets (sending lightweight payload with public image URLs)
   if (webAppUrl && webAppUrl.startsWith('http')) {
     const gasPayload = {
       action: triggerType === 'manual_send' ? 'send_line' : 'save_and_notify',
       triggerType,
-      job,
+      job: processedJob,
       targetId: targetId || DEFAULT_LINE_GROUP,
       channelAccessToken: channelAccessToken || DEFAULT_LINE_TOKEN,
       companyName: companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
@@ -338,14 +503,14 @@ app.post('/api/sync/save-and-notify', async (req, res) => {
     results.sheetSync = await sendToGoogleAppsScript(webAppUrl, gasPayload);
   }
 
-  // 2. Direct Push to LINE (Always ensure LINE message is dispatched directly)
+  // 4. Direct Push to LINE Messaging API with the real photo URL!
   if (sendLine !== false) {
     const lineToken = channelAccessToken || DEFAULT_LINE_TOKEN;
     const lineTarget = targetId || DEFAULT_LINE_GROUP;
     results.lineSync = await directPushLineMessage(
       lineTarget,
       lineToken,
-      job,
+      processedJob,
       companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
       eventLabel
     );
@@ -354,6 +519,7 @@ app.post('/api/sync/save-and-notify', async (req, res) => {
   return res.json({
     success: true,
     message: 'ดำเนินการบันทึกและส่งแจ้งเตือนเรียบร้อย',
+    job: processedJob,
     details: results,
   });
 });
@@ -368,13 +534,17 @@ app.post('/api/sync/send-line', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing job data' });
   }
 
+  const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:3000';
+  const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
+  const processedJob = processJobPhotos(job, host, proto);
+
   const lineToken = channelAccessToken || DEFAULT_LINE_TOKEN;
   const lineTarget = targetId || DEFAULT_LINE_GROUP;
 
   const result = await directPushLineMessage(
     lineTarget,
     lineToken,
-    job,
+    processedJob,
     companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
     eventLabel || '📋 รายงานข้อมูลงานหน้างาน'
   );
