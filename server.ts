@@ -33,10 +33,13 @@ if (!fs.existsSync(IMAGES_DIR)) {
 const imageStore = new Map<string, { buffer: Buffer; contentType: string }>();
 
 // Helper to save base64 to server storage and return a public HTTPS URL
-function saveBase64ImageToServer(dataUrl: string, host: string, proto = 'https'): string {
+function saveBase64ImageToServer(dataUrl: string, publicOrigin?: string): string {
   if (!dataUrl || typeof dataUrl !== 'string') return '';
-  if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) {
+  if (dataUrl.startsWith('https://')) {
     return dataUrl;
+  }
+  if (dataUrl.startsWith('http://')) {
+    return dataUrl.replace(/^http:\/\//, 'https://');
   }
 
   try {
@@ -61,14 +64,18 @@ function saveBase64ImageToServer(dataUrl: string, host: string, proto = 'https')
       console.warn('Could not write image to disk:', eDisk);
     }
 
-    // Determine public URL
-    const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
-    const cleanHost = host.replace(/:\d+$/, (port) =>
-      port === ':3000' || port === ':80' || port === ':443' ? '' : port
-    );
-    const scheme = isLocal ? 'http' : proto;
+    // Determine clean public HTTPS origin
+    let origin = (publicOrigin || '').trim().replace(/\/+$/, '');
+    if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      origin = 'https://ais-pre-d2ekaehnc7t3li2cc3z2pg-941526555561.asia-southeast1.run.app';
+    } else {
+      if (!origin.startsWith('https://') && !origin.startsWith('http://')) {
+        origin = `https://${origin}`;
+      }
+      origin = origin.replace(/^http:\/\//, 'https://');
+    }
 
-    return `${scheme}://${cleanHost || host}/api/images/${filename}`;
+    return `${origin}/api/images/${filename}`;
   } catch (err) {
     console.error('saveBase64ImageToServer error:', err);
     return '';
@@ -78,6 +85,8 @@ function saveBase64ImageToServer(dataUrl: string, host: string, proto = 'https')
 // 🌐 Public Image Serving Endpoint for LINE Flex and Google Sheets
 app.get('/api/images/:filename', (req, res) => {
   const filename = req.params.filename;
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
 
   // 1. From Memory
   const mem = imageStore.get(filename);
@@ -101,15 +110,15 @@ app.get('/api/images/:filename', (req, res) => {
 });
 
 // Helper function to process photos inside a job object
-function processJobPhotos(job: any, host: string, proto: string) {
+function processJobPhotos(job: any, publicOrigin?: string) {
   if (!job) return job;
   const clonedJob = JSON.parse(JSON.stringify(job));
 
   if (clonedJob.photos && Array.isArray(clonedJob.photos)) {
     clonedJob.photos = clonedJob.photos.map((photo: any) => {
-      const url = typeof photo === 'string' ? photo : photo.url;
+      const url = typeof photo === 'string' ? photo : photo?.url;
       if (url && typeof url === 'string' && url.startsWith('data:image/')) {
-        const publicUrl = saveBase64ImageToServer(url, host, proto);
+        const publicUrl = saveBase64ImageToServer(url, publicOrigin);
         if (publicUrl) {
           if (typeof photo === 'object') {
             return { ...photo, url: publicUrl };
@@ -124,7 +133,7 @@ function processJobPhotos(job: any, host: string, proto: string) {
 }
 
 // Helper function to build LINE Flex Bubble JSON
-function buildLineFlexPayload(job: any, companyName: string, eventLabel: string) {
+function buildLineFlexPayload(job: any, companyName: string, eventLabel: string, includeHero = true) {
   const statusColors: Record<string, string> = {
     completed: '#059669',
     in_progress: '#0284C7',
@@ -147,17 +156,14 @@ function buildLineFlexPayload(job: any, companyName: string, eventLabel: string)
   const topHeader = eventLabel || '🔔 อัพเดทสถานะงานหน้างาน';
 
   let heroImage = '';
-  if (job.photos && job.photos.length > 0) {
+  if (includeHero && job.photos && Array.isArray(job.photos) && job.photos.length > 0) {
     const firstP = job.photos[0];
-    const url = typeof firstP === 'string' ? firstP : firstP.url;
-    if (url && typeof url === 'string' && url.startsWith('http')) {
-      heroImage = url;
+    const rawUrl = typeof firstP === 'string' ? firstP : firstP?.url;
+    if (rawUrl && typeof rawUrl === 'string') {
+      if (rawUrl.startsWith('https://') || rawUrl.startsWith('http://')) {
+        heroImage = rawUrl.replace(/^http:\/\//, 'https://');
+      }
     }
-  }
-
-  if (!heroImage) {
-    heroImage =
-      'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80';
   }
 
   const mapUrl = job.location
@@ -165,7 +171,7 @@ function buildLineFlexPayload(job: any, companyName: string, eventLabel: string)
     : 'https://maps.google.com';
   const phoneUri = `tel:${String(job.phoneNumber || '').replace(/[^0-9]/g, '')}`;
 
-  return {
+  const bubble: any = {
     type: 'bubble',
     size: 'mega',
     header: {
@@ -199,14 +205,6 @@ function buildLineFlexPayload(job: any, companyName: string, eventLabel: string)
           margin: 'xs',
         },
       ],
-    },
-    hero: {
-      type: 'image',
-      url: heroImage,
-      size: 'full',
-      aspectRatio: '20:13',
-      aspectMode: 'cover',
-      action: { type: 'uri', label: 'ดูรูปภาพ', uri: heroImage },
     },
     body: {
       type: 'box',
@@ -315,14 +313,32 @@ function buildLineFlexPayload(job: any, companyName: string, eventLabel: string)
       ],
     },
   };
+
+  // Attach hero image if available and valid HTTPS
+  if (heroImage && heroImage.startsWith('https://')) {
+    bubble.hero = {
+      type: 'image',
+      url: heroImage,
+      size: 'full',
+      aspectRatio: '20:13',
+      aspectMode: 'cover',
+      action: { type: 'uri', label: 'ดูรูปภาพ', uri: heroImage },
+    };
+  }
+
+  return bubble;
 }
 
-// Function to directly push message to LINE Messaging API
+// Function to directly push message to LINE Messaging API with auto-fallback
 async function directPushLineMessage(targetId: string, token: string, job: any, companyName: string, eventLabel: string) {
+  const lineToken = token || DEFAULT_LINE_TOKEN;
+  const lineTarget = targetId || DEFAULT_LINE_GROUP;
+
   try {
-    const flexBubble = buildLineFlexPayload(job, companyName, eventLabel);
+    // Attempt 1: Full Flex Bubble (with actual job photo if available)
+    const flexBubble = buildLineFlexPayload(job, companyName, eventLabel, true);
     const linePayload = {
-      to: targetId || DEFAULT_LINE_GROUP,
+      to: lineTarget,
       messages: [
         {
           type: 'flex',
@@ -336,33 +352,72 @@ async function directPushLineMessage(targetId: string, token: string, job: any, 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token || DEFAULT_LINE_TOKEN}`,
+        Authorization: `Bearer ${lineToken}`,
       },
       body: JSON.stringify(linePayload),
     });
 
     const responseText = await response.text();
-    let responseJson = null;
-    try {
-      responseJson = JSON.parse(responseText);
-    } catch {
-      // not json
+    if (response.ok) {
+      console.log('✅ LINE Push Sent Successfully to', lineTarget);
+      return { success: true, status: response.status };
     }
 
-    if (!response.ok) {
-      console.error('LINE Push Error:', response.status, responseText);
-      return {
-        success: false,
-        status: response.status,
-        error: responseText,
-        details: responseJson?.message || responseText,
-      };
+    console.warn('⚠️ LINE Push with hero image failed (HTTP', response.status, '):', responseText);
+
+    // Attempt 2: If failed (e.g. 400 Bad Request on photo URL), retry without hero image
+    const retryBubble = buildLineFlexPayload(job, companyName, eventLabel, false);
+    const retryPayload = {
+      to: lineTarget,
+      messages: [
+        {
+          type: 'flex',
+          altText: `[${eventLabel}] ${job.title || 'งานหน้างาน'} (${job.jobCode || ''})`,
+          contents: retryBubble,
+        },
+      ],
+    };
+
+    const retryRes = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${lineToken}`,
+      },
+      body: JSON.stringify(retryPayload),
+    });
+
+    const retryText = await retryRes.text();
+    if (retryRes.ok) {
+      console.log('✅ LINE Push Fallback Flex Succeeded');
+      return { success: true, status: retryRes.status, fallbackUsed: true };
     }
 
+    // Attempt 3: Final text fallback to guarantee message arrival
+    const textMsg = `🔔 ${eventLabel}\n📌 งาน: ${job.title || 'งานหน้างาน'} (${job.jobCode || '-'})\n📊 สถานะ: ${job.status || 'รอดำเนินการ'}\n👤 ผู้ติดต่อ: ${job.contactPerson || '-'} (${job.phoneNumber || '-'})\n💰 ยอด: ฿${Number(job.price || 0).toLocaleString()}\n📍 สถานที่: ${(job.location && job.location.address) || '-'}`;
+    
+    const textRes = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${lineToken}`,
+      },
+      body: JSON.stringify({
+        to: lineTarget,
+        messages: [{ type: 'text', text: textMsg }],
+      }),
+    });
+
+    if (textRes.ok) {
+      console.log('✅ LINE Text Fallback Succeeded');
+      return { success: true, status: textRes.status, fallbackUsed: true };
+    }
+
+    console.error('❌ LINE Push Error:', response.status, responseText);
     return {
-      success: true,
+      success: false,
       status: response.status,
-      data: responseJson || responseText,
+      error: responseText,
     };
   } catch (err: any) {
     console.error('LINE Push Exception:', err);
@@ -440,16 +495,29 @@ app.post('/api/jobs', (req, res) => {
 // 🌟 API ROUTE 1: Save Job & Notify LINE
 // ==========================================
 app.post('/api/sync/save-and-notify', async (req, res) => {
-  const { webAppUrl, job, triggerType, targetId, channelAccessToken, companyName, customEventLabel, sendLine } = req.body;
+  const { webAppUrl, job, triggerType, targetId, channelAccessToken, companyName, customEventLabel, sendLine, clientOrigin } = req.body;
 
   if (!job) {
     return res.status(400).json({ success: false, message: 'Missing job data' });
   }
 
-  // 1. Convert any base64 images to permanent public HTTPS URLs
-  const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:3000';
-  const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
-  const processedJob = processJobPhotos(job, host, proto);
+  // 1. Resolve public HTTPS origin for permanent image hosting
+  let publicOrigin = (clientOrigin || '').trim();
+  if (!publicOrigin && req.get('origin')) {
+    publicOrigin = req.get('origin')!;
+  }
+  if (!publicOrigin && req.get('referer')) {
+    try {
+      const u = new URL(req.get('referer')!);
+      publicOrigin = `${u.protocol}//${u.host}`;
+    } catch {}
+  }
+  if (!publicOrigin && req.get('x-forwarded-host')) {
+    const proto = req.get('x-forwarded-proto') || 'https';
+    publicOrigin = `${proto}://${req.get('x-forwarded-host')}`;
+  }
+
+  const processedJob = processJobPhotos(job, publicOrigin);
 
   // 2. Update server-side shared jobs list
   const existingIdx = sharedJobs.findIndex((j) => j.id === processedJob.id);
@@ -528,15 +596,28 @@ app.post('/api/sync/save-and-notify', async (req, res) => {
 // 🌟 API ROUTE 2: Direct Send LINE Flex Message
 // ==========================================
 app.post('/api/sync/send-line', async (req, res) => {
-  const { job, targetId, channelAccessToken, companyName, eventLabel } = req.body;
+  const { job, targetId, channelAccessToken, companyName, eventLabel, clientOrigin } = req.body;
 
   if (!job) {
     return res.status(400).json({ success: false, message: 'Missing job data' });
   }
 
-  const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:3000';
-  const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
-  const processedJob = processJobPhotos(job, host, proto);
+  let publicOrigin = (clientOrigin || '').trim();
+  if (!publicOrigin && req.get('origin')) {
+    publicOrigin = req.get('origin')!;
+  }
+  if (!publicOrigin && req.get('referer')) {
+    try {
+      const u = new URL(req.get('referer')!);
+      publicOrigin = `${u.protocol}//${u.host}`;
+    } catch {}
+  }
+  if (!publicOrigin && req.get('x-forwarded-host')) {
+    const proto = req.get('x-forwarded-proto') || 'https';
+    publicOrigin = `${proto}://${req.get('x-forwarded-host')}`;
+  }
+
+  const processedJob = processJobPhotos(job, publicOrigin);
 
   const lineToken = channelAccessToken || DEFAULT_LINE_TOKEN;
   const lineTarget = targetId || DEFAULT_LINE_GROUP;

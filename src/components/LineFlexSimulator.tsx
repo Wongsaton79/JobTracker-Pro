@@ -65,20 +65,13 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
   };
 
   const handleSendToGroup = async () => {
-    const targetId = settings.lineTargetGroupId || 'C341417bcb6e853c320eaf9d80963cda3';
-    if (!settings.googleSheetUrl) {
-      setSendResult({
-        text: 'กรุณาตั้งค่า Google Sheets Web App URL ก่อนเพื่อเป็นช่องทางส่ง LINE Message',
-        type: 'error',
-      });
-      return;
-    }
+    const targetId = settings.lineTargetGroupId || settings.lineTargetUserId || 'C341417bcb6e853c320eaf9d80963cda3';
 
     setIsSending(true);
     setSendResult(null);
 
     const res = await sendLineFlexViaAppsScript(
-      settings.googleSheetUrl,
+      settings.googleSheetUrl || '',
       currentJob,
       targetId,
       settings.companyName

@@ -784,10 +784,11 @@ export const saveAndNotifyJob = async (
     job,
     triggerType,
     targetId: options?.targetId || 'C341417bcb6e853c320eaf9d80963cda3',
-    channelAccessToken: options?.channelAccessToken,
+    channelAccessToken: options?.channelAccessToken || 'JOdpOQkd0rtaYfPfGVLwZj9LMshtp010Hgb5DsM9HmRmtDWqrSJFTVjXLd6mLmhS3bCmWfTIKeHkC3yhWVMGXKP/R7HhnWEizWvqnxi8EWa/jMVUKxz1mck/P+8/LvTaHJl/Fpq0P7Okf547iIlW2wdB04t89/1O/w1cDnyilFU=',
     companyName: options?.companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
     customEventLabel: eventLabel,
     sendLine: options?.sendLine !== false,
+    clientOrigin: typeof window !== 'undefined' ? window.location.origin : '',
   };
 
   let serverSuccess = false;

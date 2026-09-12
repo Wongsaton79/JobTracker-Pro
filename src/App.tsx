@@ -210,9 +210,9 @@ export default function App() {
     showToast(`กำลังส่ง LINE Flex สำหรับ "${job.title}" เข้ากลุ่ม...`, 'info');
     try {
       const result = await saveAndNotifyJob(settings.googleSheetUrl || '', job, 'manual_send', {
-        targetId: settings.lineTargetGroupId || settings.lineTargetUserId,
-        channelAccessToken: settings.lineChannelAccessToken,
-        companyName: settings.companyName,
+        targetId: settings.lineTargetGroupId || settings.lineTargetUserId || INITIAL_SETTINGS.lineTargetGroupId,
+        channelAccessToken: settings.lineChannelAccessToken || INITIAL_SETTINGS.lineChannelAccessToken,
+        companyName: settings.companyName || INITIAL_SETTINGS.companyName,
         customEventLabel: customHeader || '📋 รายงานข้อมูลงานหน้างาน',
         sendLine: true,
       });
@@ -259,9 +259,9 @@ export default function App() {
         savedJob,
         isEdit ? 'edit_job' : 'new_job',
         {
-          targetId: settings.lineTargetGroupId || settings.lineTargetUserId,
-          channelAccessToken: settings.lineChannelAccessToken,
-          companyName: settings.companyName,
+          targetId: settings.lineTargetGroupId || settings.lineTargetUserId || INITIAL_SETTINGS.lineTargetGroupId,
+          channelAccessToken: settings.lineChannelAccessToken || INITIAL_SETTINGS.lineChannelAccessToken,
+          companyName: settings.companyName || INITIAL_SETTINGS.companyName,
           sendLine: true,
         }
       );
@@ -324,9 +324,9 @@ export default function App() {
           updatedTarget,
           'status_update',
           {
-            targetId: settings.lineTargetGroupId || settings.lineTargetUserId,
-            channelAccessToken: settings.lineChannelAccessToken,
-            companyName: settings.companyName,
+            targetId: settings.lineTargetGroupId || settings.lineTargetUserId || INITIAL_SETTINGS.lineTargetGroupId,
+            channelAccessToken: settings.lineChannelAccessToken || INITIAL_SETTINGS.lineChannelAccessToken,
+            companyName: settings.companyName || INITIAL_SETTINGS.companyName,
             sendLine: true,
           }
         );
