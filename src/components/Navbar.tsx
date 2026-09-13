@@ -9,6 +9,7 @@ import {
   Smartphone,
   Tablet,
   Monitor,
+  History,
 } from 'lucide-react';
 import { JobItem, SyncSettings } from '../types';
 import { formatCurrency } from '../utils/formatters';
@@ -18,6 +19,7 @@ interface NavbarProps {
   onTabChange: (tab: 'jobs' | 'dashboard' | 'map' | 'line_flex') => void;
   onOpenNewJob: () => void;
   onOpenSettings: () => void;
+  onOpenAuditLogs: () => void;
   jobs: JobItem[];
   settings: SyncSettings;
 }
@@ -27,6 +29,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onTabChange,
   onOpenNewJob,
   onOpenSettings,
+  onOpenAuditLogs,
   jobs,
   settings,
 }) => {
@@ -76,7 +79,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
-            {/* Discreet Settings Gear Button (Firebase & LINE Settings) */}
+            {/* Audit Log Button */}
+            <button
+              onClick={onOpenAuditLogs}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700 hover:border-slate-600 shadow-xs"
+              title="ดูประวัติการทำงานของระบบ (Audit Logs)"
+              aria-label="ประวัติการทำงาน"
+            >
+              <History className="w-4 h-4 text-indigo-400" />
+              <span className="hidden sm:inline">Audit Logs</span>
+            </button>
+
+            {/* Settings Gear Button (Firebase & LINE Settings) */}
             <button
               onClick={onOpenSettings}
               className="relative w-9 h-9 rounded-xl flex items-center justify-center transition-all border bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700 hover:border-slate-600"
@@ -149,6 +163,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Send className="w-3.5 h-3.5" />
             <span>💬 LINE Flex & Notify</span>
+          </button>
+
+          <button
+            onClick={onOpenAuditLogs}
+            className="px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 text-slate-300 hover:text-white hover:bg-slate-800"
+          >
+            <History className="w-3.5 h-3.5 text-indigo-400" />
+            <span>📜 ประวัติการทำงาน (Audit Logs)</span>
           </button>
         </div>
       </div>

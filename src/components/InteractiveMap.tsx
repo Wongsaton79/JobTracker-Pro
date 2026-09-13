@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
-import { MapPin, Navigation, Compass, Search, Loader2, ExternalLink } from 'lucide-react';
+import { MapPin, Compass, Loader2, ExternalLink, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 interface InteractiveMapProps {
   lat: number;
@@ -22,26 +22,175 @@ interface InteractiveMapProps {
   onMarkerClick?: (id: string) => void;
 }
 
+// 📐 Haversine Formula for distance in kilometers
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Radius of the Earth in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// 🔒 Clamp a coordinate so it does not exceed maxRadiusKm from center
+function clampToRadius(
+  centerLat: number,
+  centerLng: number,
+  targetLat: number,
+  targetLng: number,
+  maxRadiusKm: number
+): { lat: number; lng: number; wasClamped: boolean; distanceKm: number } {
+  const distance = calculateDistanceKm(centerLat, centerLng, targetLat, targetLng);
+  if (distance <= maxRadiusKm) {
+    return { lat: targetLat, lng: targetLng, wasClamped: false, distanceKm: distance };
+  }
+
+  // Constrain along vector from center to target
+  const ratio = maxRadiusKm / distance;
+  const clampedLat = centerLat + (targetLat - centerLat) * ratio;
+  const clampedLng = centerLng + (targetLng - centerLng) * ratio;
+  return { lat: clampedLat, lng: clampedLng, wasClamped: true, distanceKm: maxRadiusKm };
+}
+
 export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   lat,
   lng,
   address,
   isEditable = false,
   onLocationChange,
-  height = '320px',
+  height = '300px',
   allMarkers,
   onMarkerClick,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
+  const gpsCenterMarkerRef = useRef<L.Marker | null>(null);
+  const radiusCircleRef = useRef<L.Circle | null>(null);
   const markersGroupRef = useRef<L.LayerGroup | null>(null);
-  const [isGettingGps, setIsGettingGps] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const [gpsError, setGpsError] = useState<string | null>(null);
 
-  // Initialize or re-center Map
+  const [isGettingGps, setIsGettingGps] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [deviceGps, setDeviceGps] = useState<{ lat: number; lng: number } | null>(null);
+  const [currentDistance, setCurrentDistance] = useState<number | null>(null);
+  const [radiusWarning, setRadiusWarning] = useState<string | null>(null);
+
+  const MAX_RADIUS_KM = 5.0; // 5 Kilometers limit
+
+  // Reverse geocoding via OpenStreetMap Nominatim
+  const reverseGeocode = useCallback(
+    async (newLat: number, newLng: number) => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${newLat}&lon=${newLng}&zoom=18&addressdetails=1&accept-language=th`,
+          { headers: { 'User-Agent': 'JobTrackerPro/1.0' } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const displayAddress = data.display_name || `${newLat.toFixed(5)}, ${newLng.toFixed(5)}`;
+          if (onLocationChange) {
+            onLocationChange(newLat, newLng, displayAddress);
+          }
+        } else {
+          if (onLocationChange) onLocationChange(newLat, newLng);
+        }
+      } catch {
+        if (onLocationChange) onLocationChange(newLat, newLng);
+      }
+    },
+    [onLocationChange]
+  );
+
+  // Update visual 5km Circle on Leaflet map
+  const updateRadiusCircle = useCallback((centerLat: number, centerLng: number) => {
+    if (!mapInstanceRef.current) return;
+
+    // Remove old circle
+    if (radiusCircleRef.current) {
+      radiusCircleRef.current.remove();
+    }
+    if (gpsCenterMarkerRef.current) {
+      gpsCenterMarkerRef.current.remove();
+    }
+
+    // 1. Draw 5km radius boundary circle
+    const circle = L.circle([centerLat, centerLng], {
+      radius: MAX_RADIUS_KM * 1000, // 5000 meters
+      color: '#0284C7',
+      weight: 2,
+      opacity: 0.8,
+      fillColor: '#38BDF8',
+      fillOpacity: 0.1,
+      dashArray: '6, 6',
+    }).addTo(mapInstanceRef.current);
+
+    radiusCircleRef.current = circle;
+
+    // 2. Center dot for Current Device GPS
+    const gpsCenterIcon = L.divIcon({
+      className: 'gps-center-icon',
+      html: `
+        <div style="background-color: #0284C7; width: 14px; height: 14px; border-radius: 50%; border: 2.5px solid white; box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.4);">
+        </div>
+      `,
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    });
+
+    const gpsMarker = L.marker([centerLat, centerLng], {
+      icon: gpsCenterIcon,
+      interactive: false,
+    }).addTo(mapInstanceRef.current);
+
+    gpsCenterMarkerRef.current = gpsMarker;
+  }, []);
+
+  // Fetch Current Device GPS
+  const handleGetCurrentLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setGpsError('อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง GPS');
+      return;
+    }
+
+    setIsGettingGps(true);
+    setGpsError(null);
+    setRadiusWarning(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const currentLat = pos.coords.latitude;
+        const currentLng = pos.coords.longitude;
+        setIsGettingGps(false);
+        setDeviceGps({ lat: currentLat, lng: currentLng });
+        setCurrentDistance(0);
+
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.setView([currentLat, currentLng], 15);
+          updateRadiusCircle(currentLat, currentLng);
+        }
+        if (markerRef.current) {
+          markerRef.current.setLatLng([currentLat, currentLng]);
+        }
+
+        reverseGeocode(currentLat, currentLng);
+      },
+      (err) => {
+        setIsGettingGps(false);
+        console.warn('GPS location error:', err);
+        setGpsError(
+          'ไม่สามารถดึงพิกัด GPS ได้ กรุณาอนุญาตสิทธิ์ Location (ตำแหน่งที่ตั้ง) บนเบราว์เซอร์ของคุณ'
+        );
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+  }, [reverseGeocode, updateRadiusCircle]);
+
+  // Initialize Map
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
@@ -62,7 +211,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
       mapInstanceRef.current = map;
 
-      // Custom Pin Icon
+      // Custom Job Pin Icon
       const customIcon = L.divIcon({
         className: 'custom-pin-icon',
         html: `
@@ -83,33 +232,60 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         markerRef.current = marker;
 
         if (isEditable) {
-          marker.on('dragend', async () => {
-            const position = marker.getLatLng();
-            reverseGeocode(position.lat, position.lng);
+          // Handle Pin Dragging with 5km Radius Clamp
+          marker.on('dragend', () => {
+            const pos = marker.getLatLng();
+            applyLocationWithRadiusCheck(pos.lat, pos.lng);
           });
 
+          // Handle Map Clicking with 5km Radius Clamp
           map.on('click', (e: L.LeafletMouseEvent) => {
-            marker.setLatLng(e.latlng);
-            reverseGeocode(e.latlng.lat, e.latlng.lng);
+            applyLocationWithRadiusCheck(e.latlng.lat, e.latlng.lng);
           });
-        }
-      }
-    } else {
-      // Re-center when lat/lng props change
-      if (lat && lng && !allMarkers) {
-        mapInstanceRef.current.setView([lat, lng], 15);
-        if (markerRef.current) {
-          markerRef.current.setLatLng([lat, lng]);
         }
       }
     }
 
-    return () => {
-      // Keep map reference stable or cleanup on unmount
-    };
+    // Auto trigger GPS on editable mode if not yet set
+    if (isEditable && !deviceGps) {
+      handleGetCurrentLocation();
+    }
   }, []);
 
-  // Handle allMarkers update for overview mode
+  // Check distance and clamp if beyond 5km
+  const applyLocationWithRadiusCheck = (targetLat: number, targetLng: number) => {
+    let finalLat = targetLat;
+    let finalLng = targetLng;
+
+    if (deviceGps) {
+      const clampResult = clampToRadius(
+        deviceGps.lat,
+        deviceGps.lng,
+        targetLat,
+        targetLng,
+        MAX_RADIUS_KM
+      );
+
+      finalLat = clampResult.lat;
+      finalLng = clampResult.lng;
+      setCurrentDistance(clampResult.distanceKm);
+
+      if (clampResult.wasClamped) {
+        setRadiusWarning(
+          `⚠️ ปักหมุดอยู่นอกรัศมี 5 กม. ระบบได้จำกัดหมุดให้อยู่ที่ขอบรัศมี 5.0 กม. จากพิกัด GPS ปัจจุบันของคุณ`
+        );
+      } else {
+        setRadiusWarning(null);
+      }
+    }
+
+    if (markerRef.current) {
+      markerRef.current.setLatLng([finalLat, finalLng]);
+    }
+    reverseGeocode(finalLat, finalLng);
+  };
+
+  // Re-render allMarkers overview if provided
   useEffect(() => {
     if (!mapInstanceRef.current || !allMarkers) return;
 
@@ -160,170 +336,82 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     if (allMarkers.length > 0 && bounds.isValid()) {
       mapInstanceRef.current.fitBounds(bounds, { padding: [40, 40] });
     }
-  }, [allMarkers]);
-
-  // Reverse geocoding via OpenStreetMap Nominatim
-  const reverseGeocode = async (newLat: number, newLng: number) => {
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${newLat}&lon=${newLng}&zoom=18&addressdetails=1&accept-language=th`,
-        { headers: { 'User-Agent': 'JobTrackerPro/1.0' } }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const displayAddress = data.display_name || `${newLat.toFixed(5)}, ${newLng.toFixed(5)}`;
-        if (onLocationChange) {
-          onLocationChange(newLat, newLng, displayAddress);
-        }
-      } else {
-        if (onLocationChange) onLocationChange(newLat, newLng);
-      }
-    } catch {
-      if (onLocationChange) onLocationChange(newLat, newLng);
-    }
-  };
-
-  // GPS Current Location Detection
-  const handleGetCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setGpsError('อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง GPS');
-      return;
-    }
-
-    setIsGettingGps(true);
-    setGpsError(null);
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const currentLat = pos.coords.latitude;
-        const currentLng = pos.coords.longitude;
-        setIsGettingGps(false);
-
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.setView([currentLat, currentLng], 16);
-        }
-        if (markerRef.current) {
-          markerRef.current.setLatLng([currentLat, currentLng]);
-        }
-
-        reverseGeocode(currentLat, currentLng);
-      },
-      (err) => {
-        setIsGettingGps(false);
-        console.error(err);
-        setGpsError('ไม่สามารถดึงพิกัด GPS ได้ กรุณาเปิดสิทธิ์ Location หรือเลือกตำแหน่งบนแผนที่แทน');
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  };
-
-  // Search Address/Location
-  const handleSearchLocation = async (e?: React.FormEvent | React.MouseEvent | React.KeyboardEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    if (!searchQuery.trim()) return;
-
-    setIsSearching(true);
-    setGpsError(null);
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          searchQuery.trim() + ' Thailand'
-        )}&limit=1&accept-language=th`,
-        { headers: { 'User-Agent': 'JobTrackerPro/1.0' } }
-      );
-      const data = await res.json();
-      if (data && data.length > 0) {
-        const foundLat = parseFloat(data[0].lat);
-        const foundLng = parseFloat(data[0].lon);
-
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.setView([foundLat, foundLng], 16);
-        }
-        if (markerRef.current) {
-          markerRef.current.setLatLng([foundLat, foundLng]);
-        }
-        if (onLocationChange) {
-          onLocationChange(foundLat, foundLng, data[0].display_name);
-        }
-      } else {
-        setGpsError(`ไม่พบสถานที่ "${searchQuery}" กรุณาลองระบุชื่อสถานที่/ถนนให้ชัดเจนขึ้น หรือเลื่อนหมุดบนแผนที่`);
-      }
-    } catch (err) {
-      console.error('Search error:', err);
-      setGpsError('เกิดข้อผิดพลาดในการเชื่อมต่อค้นหาสถานที่ กรุณาลองใหม่อีกครั้ง');
-    } finally {
-      setIsSearching(false);
-    }
-  };
+  }, [allMarkers, onMarkerClick]);
 
   const googleMapsUrl = `https://www.google.com/maps?q=${lat || 13.7563},${lng || 100.5018}`;
 
   return (
     <div className="relative w-full flex flex-col gap-2">
+      {/* Location Toolbar for Editable Mode (GPS ONLY, Search Removed, 5KM Radius Enforced) */}
       {isEditable && (
-        <div className="flex flex-col sm:flex-row gap-2">
-          {/* Search bar (using div and onKeyDown to prevent nested form submissions) */}
-          <div className="flex-1 relative flex items-center">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                if (gpsError) setGpsError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleSearchLocation(e);
-                }
-              }}
-              placeholder="ค้นหาชื่อสถานที่ / ถนน / เขต / ซอย..."
-              className="w-full text-xs sm:text-sm pl-8 pr-16 py-2 border border-slate-300 rounded-lg bg-white shadow-xs focus:ring-2 focus:ring-sky-500 focus:outline-none"
-            />
-            <Search className="w-4 h-4 text-slate-400 absolute left-2.5 pointer-events-none" />
-            <button
-              type="button"
-              onClick={(e) => handleSearchLocation(e)}
-              disabled={isSearching}
-              className="absolute right-1 px-2.5 py-1 text-xs bg-slate-800 text-white rounded-md hover:bg-slate-700 disabled:opacity-50 transition-colors font-medium flex items-center gap-1"
-            >
-              {isSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'ค้นหา'}
-            </button>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-sky-50/80 p-2.5 rounded-xl border border-sky-200">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Compass className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-800">
+                  ระบุพิกัดจาก GPS อุปกรณ์ปัจจุบัน
+                </span>
+                <span className="text-[10px] bg-sky-100 text-sky-800 border border-sky-300 px-1.5 py-0.2 rounded-full font-medium">
+                  จำกัดรัศมีไม่เกิน 5 กม.
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                {deviceGps ? (
+                  currentDistance !== null ? (
+                    <span className="text-sky-700 font-semibold">
+                      📍 ระยะห่างจาก GPS ของคุณ: {currentDistance.toFixed(2)} กม. (สูงสุด 5.0 กม.)
+                    </span>
+                  ) : (
+                    'พร้อมจับพิกัดแล้ว • สามารถลากหมุดปรับตำแหน่งในวง 5 กม. ได้'
+                  )
+                ) : (
+                  'กดปุ่มด้านขวาเพื่อดึงพิกัด GPS อัตโนมัติ'
+                )}
+              </p>
+            </div>
           </div>
 
-          {/* GPS Button */}
           <button
             type="button"
             onClick={handleGetCurrentLocation}
             disabled={isGettingGps}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors shadow-xs active:scale-95 shrink-0"
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all shadow-xs active:scale-95 shrink-0"
           >
             {isGettingGps ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>กำลังจับพิกัด GPS...</span>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>กำลังดึงพิกัด GPS...</span>
               </>
             ) : (
               <>
-                <Compass className="w-4 h-4" />
-                <span>พิกัด GPS ปัจจุบัน</span>
+                <Compass className="w-3.5 h-3.5" />
+                <span>🎯 อัพเดทพิกัด GPS ตอนนี้</span>
               </>
             )}
           </button>
         </div>
       )}
 
+      {/* GPS Error Alert */}
       {gpsError && (
-        <div className="text-xs bg-amber-50 text-amber-800 p-2 rounded-md border border-amber-200">
-          ⚠️ {gpsError}
+        <div className="text-xs bg-amber-50 text-amber-900 p-2.5 rounded-lg border border-amber-300 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>{gpsError}</span>
         </div>
       )}
 
-      {/* Map Container */}
+      {/* Radius 5KM Warning Alert */}
+      {radiusWarning && (
+        <div className="text-xs bg-rose-50 text-rose-800 p-2 rounded-lg border border-rose-200 flex items-center gap-2 animate-fade-in font-medium">
+          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{radiusWarning}</span>
+        </div>
+      )}
+
+      {/* Map Canvas */}
       <div
         className="relative w-full rounded-xl overflow-hidden border border-slate-200 shadow-inner bg-slate-100"
         style={{ height }}
@@ -342,22 +430,23 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         </a>
 
         {isEditable && (
-          <div className="absolute top-2 left-2 z-[400] bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-md text-[11px] text-slate-600 shadow-xs border border-slate-200">
-            💡 คลิกหรือลากหมุดบนแผนที่เพื่อเปลี่ยนตำแหน่ง
+          <div className="absolute top-2 left-2 z-[400] bg-white/95 backdrop-blur-xs px-2.5 py-1.5 rounded-lg text-[11px] text-slate-700 shadow-sm border border-slate-200 flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+            <span>วงกลมเส้นประสีฟ้า = ขอบเขตรัศมี 5 กม. จาก GPS</span>
           </div>
         )}
       </div>
 
       {/* Coordinates status badge */}
       {lat && lng && (
-        <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200">
-          <div className="flex items-center gap-1 truncate">
+        <div className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
+          <div className="flex items-center gap-1.5 truncate">
             <MapPin className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-            <span className="truncate">
+            <span className="truncate font-medium">
               {address ? address : `พิกัด: ${lat.toFixed(5)}, ${lng.toFixed(5)}`}
             </span>
           </div>
-          <span className="font-mono text-[11px] shrink-0 text-slate-600">
+          <span className="font-mono text-[11px] shrink-0 text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 ml-2">
             {lat.toFixed(4)}, {lng.toFixed(4)}
           </span>
         </div>

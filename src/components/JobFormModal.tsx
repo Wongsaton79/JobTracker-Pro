@@ -16,12 +16,15 @@ import {
   AlertCircle,
   Sparkles,
   Send,
+  Layers,
 } from 'lucide-react';
-import { JobItem, JobStatus, PaymentType, SyncSettings } from '../types';
+import { JobItem, JobStatus, PaymentType, SyncSettings, WorkRound, ProductItem } from '../types';
 import { InteractiveMap } from './InteractiveMap';
 import { PhotoUploader, uploadDirectToPublicCdn } from './PhotoUploader';
+import { WorkRoundsEditor } from './WorkRoundsEditor';
 import { POPULAR_BRANDS } from '../data/initialData';
 import { getPaymentTypeConfig, getStatusConfig } from '../utils/formatters';
+import { addAuditLog } from '../utils/auditLogger';
 
 interface JobFormModalProps {
   isOpen: boolean;
@@ -39,7 +42,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
   settings,
 }) => {
   const [formData, setFormData] = useState<Partial<JobItem>>({});
-  const [customBrand, setCustomBrand] = useState('');
+  const [rounds, setRounds] = useState<WorkRound[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -54,9 +57,11 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
 
       if (editingJob) {
         setFormData(editingJob);
+        setRounds(editingJob.workRounds || []);
       } else {
+        const initialJobCode = `JOB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
         setFormData({
-          jobCode: `JOB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+          jobCode: initialJobCode,
           title: '',
           contactPerson: '',
           phoneNumber: '',
@@ -76,10 +81,55 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
           notes: '',
           assignedTo: '',
         });
+
+        // Initialize with Round 1 as default
+        setRounds([
+          {
+            id: `round-${Date.now()}`,
+            roundNumber: 1,
+            title: 'รอบที่ 1: เข้าสำรวจและเริ่มงาน',
+            date: defaultDate,
+            time: defaultTime,
+            teamName: 'ทีมช่างประจำรอบ',
+            status: 'pending',
+            description: '',
+            products: [],
+            roundTotalCost: 0,
+            createdAt: now.toISOString(),
+          },
+        ]);
       }
       setErrors({});
     }
   }, [isOpen, editingJob]);
+
+  // When work rounds change, recalculate total cost and update productBrand/details summaries
+  const handleRoundsChange = (newRounds: WorkRound[]) => {
+    setRounds(newRounds);
+
+    // Calculate grand total from all products across all rounds
+    const allProducts: ProductItem[] = [];
+    newRounds.forEach((r) => {
+      if (r.products && r.products.length > 0) {
+        allProducts.push(...r.products);
+      }
+    });
+
+    const totalFromProducts = allProducts.reduce((sum, p) => sum + (p.totalPrice || 0), 0);
+
+    // Derive summarized brands and product names
+    const uniqueBrands = Array.from(new Set(allProducts.map((p) => p.brand).filter(Boolean)));
+    const productSummary = allProducts
+      .map((p) => `${p.name || p.brand} (${p.quantity} ${p.unit})`)
+      .join(', ');
+
+    setFormData((prev) => ({
+      ...prev,
+      price: totalFromProducts > 0 ? totalFromProducts : prev.price,
+      productBrand: uniqueBrands.length > 0 ? uniqueBrands.join(' / ') : prev.productBrand,
+      productDetails: productSummary || prev.productDetails,
+    }));
+  };
 
   if (!isOpen) return null;
 
@@ -106,7 +156,9 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
     if (!formData.contactPerson?.trim()) errs.contactPerson = 'กรุณาระบุชื่อผู้ติดต่อ';
     if (!formData.phoneNumber?.trim()) errs.phoneNumber = 'กรุณาระบุเบอร์ติดต่อ';
     if (!formData.date) errs.date = 'กรุณาเลือกวันที่';
-    if (!formData.productBrand?.trim()) errs.productBrand = 'กรุณาระบุแบรนด์สินค้า';
+    if (!formData.productBrand?.trim() && rounds.every((r) => !r.products || r.products.length === 0)) {
+      errs.productBrand = 'กรุณาระบุแบรนด์สินค้า หรือเพิ่มรายการสินค้าในรอบงาน';
+    }
     if (formData.price === undefined || formData.price < 0) errs.price = 'กรุณาระบุราคาที่ถูกต้อง';
 
     setErrors(errs);
@@ -116,7 +168,6 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) {
-      // Scroll to top error
       const el = document.getElementById('job-form-container');
       if (el) el.scrollTop = 0;
       return;
@@ -140,7 +191,28 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
       })
     );
 
-    const finalBrand = formData.productBrand?.trim() || 'ทั่วไป';
+    // Gather all products across rounds
+    const allProducts: ProductItem[] = [];
+    rounds.forEach((r) => {
+      if (r.products && r.products.length > 0) {
+        allProducts.push(...r.products);
+      }
+    });
+
+    const finalBrand =
+      formData.productBrand?.trim() ||
+      (allProducts.length > 0 ? Array.from(new Set(allProducts.map((p) => p.brand))).join(' / ') : 'ทั่วไป');
+
+    const finalDetails =
+      formData.productDetails?.trim() ||
+      (allProducts.length > 0
+        ? allProducts.map((p) => `${p.name || p.brand} (${p.quantity} ${p.unit})`).join(', ')
+        : 'รายละเอียดตามใบงาน');
+
+    // Find active assigned team from the latest round or fallback
+    const currentAssigned =
+      formData.assignedTo?.trim() ||
+      (rounds.length > 0 ? rounds[rounds.length - 1].teamName : 'ทีมช่างปฏิบัติการ');
 
     const completeJob: JobItem = {
       id: editingJob?.id || `job-${Date.now()}`,
@@ -158,15 +230,47 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
       },
       photos: processedPhotos,
       productBrand: finalBrand,
-      productDetails: formData.productDetails?.trim() || '',
+      productDetails: finalDetails,
       price: Number(formData.price) || 0,
       paymentType: formData.paymentType as PaymentType,
       notes: formData.notes?.trim() || '',
-      assignedTo: formData.assignedTo?.trim() || '',
+      assignedTo: currentAssigned,
+      workRounds: rounds,
+      products: allProducts,
       createdAt: editingJob?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       syncStatus: 'pending',
     };
+
+    // 📜 Record Audit Log
+    const user = settings.currentUser || 'เจ้าหน้าที่ระบบ';
+    if (editingJob) {
+      const isStatusChanged = editingJob.status !== completeJob.status;
+      addAuditLog({
+        userName: user,
+        action: isStatusChanged ? 'status_change' : 'update_job',
+        actionLabel: isStatusChanged ? 'เปลี่ยนสถานะงาน' : 'แก้ไขข้อมูลงาน',
+        jobCode: completeJob.jobCode,
+        jobTitle: completeJob.title,
+        jobId: completeJob.id,
+        details: isStatusChanged
+          ? `เปลี่ยนสถานะจาก "${getStatusConfig(editingJob.status).label}" เป็น "${getStatusConfig(completeJob.status).label}" | ยอดรวม ฿${completeJob.price.toLocaleString()}`
+          : `แก้ไขข้อมูลหน้างาน, ปรับปรุง ${rounds.length} รอบการทำงาน และ ${allProducts.length} รายการสินค้า`,
+        statusBefore: editingJob.status,
+        statusAfter: completeJob.status,
+      });
+    } else {
+      addAuditLog({
+        userName: user,
+        action: 'create_job',
+        actionLabel: 'สร้างงานใหม่',
+        jobCode: completeJob.jobCode,
+        jobTitle: completeJob.title,
+        jobId: completeJob.id,
+        details: `บันทึกข้อมูลหน้างานใหม่ สถานะ "${getStatusConfig(completeJob.status).label}" จำนวน ${rounds.length} รอบงาน (${allProducts.length} สินค้า) ยอดรวม ฿${completeJob.price.toLocaleString()}`,
+        statusAfter: completeJob.status,
+      });
+    }
 
     onSave(completeJob);
     setIsSubmitting(false);
@@ -187,7 +291,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold">
-                {editingJob ? 'แก้ไขและอัพเดทสถานะงาน' : 'บันทึกข้อมูลหน้างานใหม่'}
+                {editingJob ? 'แก้ไขและอัพเดทข้อมูลหน้างาน' : 'บันทึกข้อมูลหน้างานใหม่'}
               </h2>
               <p className="text-xs text-slate-300">
                 รหัสงาน: <span className="font-mono text-sky-300 font-semibold">{formData.jobCode}</span>
@@ -225,7 +329,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                 type="text"
                 value={formData.title || ''}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="เช่น ติดตั้งเครื่องปรับอากาศ บ้านเดี่ยวรามอินทรา, ปูกระเบื้องคอนโดลุมพินี"
+                placeholder="เช่น ติดตั้งเครื่องปรับอากาศ บ้านเดี่ยวรามอินทรา, งานเทพื้นและปูกระเบื้องโกดัง"
                 className={`w-full text-sm px-3.5 py-2.5 bg-white border ${
                   errors.title ? 'border-rose-400 ring-1 ring-rose-300' : 'border-slate-300'
                 } rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none`}
@@ -333,26 +437,30 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">ช่าง / ผู้รับผิดชอบ</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  ช่าง / ผู้รับผิดชอบหลัก
+                </label>
                 <input
                   type="text"
                   value={formData.assignedTo || ''}
                   onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
-                  placeholder="เช่น ช่างเอกชัย (ทีม A)"
+                  placeholder="เช่น ทีมช่างเอกชัย (ทีม A)"
                   className="w-full text-sm px-3 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none"
                 />
               </div>
             </div>
           </div>
 
-          {/* Section 2: ระบุพิกัดแผนที่ (Google Map & GPS Pin) */}
+          {/* Section 2: ระบุพิกัดแผนที่ (GPS ONLY, Search Disabled, 5KM Radius Enforced) */}
           <div className="bg-slate-50 p-4 sm:p-5 rounded-xl border border-slate-200 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-200 pb-2">
               <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-sky-600" />
                 <span>2. ระบุพิกัดสถานที่ & แผนที่หน้างาน</span>
               </h3>
-              <span className="text-[11px] text-slate-500">เลือกจาก GPS หรือปักหมุดบน Map</span>
+              <span className="text-[11px] text-sky-700 font-semibold bg-sky-100 px-2 py-0.5 rounded-full">
+                🔒 พิกัด GPS ปัจจุบันเท่านั้น (รัศมีไม่เกิน 5 กม.)
+              </span>
             </div>
 
             {/* Address Name */}
@@ -372,18 +480,18 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                     },
                   })
                 }
-                placeholder="ระบุชื่ออาคาร หมู่บ้าน ถนน ซอย หรือระบบจะกรอกให้อัตโนมัติเมื่อปักหมุด"
+                placeholder="ระบุชื่ออาคาร หมู่บ้าน ถนน ซอย หรือระบบจะระบุให้อัตโนมัติจาก GPS"
                 className="w-full text-sm px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none"
               />
             </div>
 
-            {/* Interactive Leaflet/Google Map Picker */}
+            {/* Interactive Leaflet GPS Map with 5KM Radius Restriction */}
             <InteractiveMap
               lat={formData.location?.lat || 13.7563}
               lng={formData.location?.lng || 100.5018}
               address={formData.location?.address}
               isEditable={true}
-              height="260px"
+              height="280px"
               onLocationChange={(newLat, newLng, newAddress) => {
                 setFormData((prev) => ({
                   ...prev,
@@ -414,67 +522,61 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
             />
           </div>
 
-          {/* Section 4: สินค้า แบรนด์ ราคา และการชำระเงิน */}
+          {/* Section 4: รอบการเข้าหน้างาน, สินค้าหลายชิ้น, สลับทีมช่าง & การชำระเงิน */}
           <div className="bg-slate-50 p-4 sm:p-5 rounded-xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-200 pb-2">
               <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-emerald-600" />
                 <span>4. ข้อมูลสินค้า แบรนด์ ราคา และการชำระเงิน</span>
               </h3>
-              <span className="text-[11px] text-rose-500 font-medium">* สินค้า / ราคา / สดหรือเครดิต</span>
+              <span className="text-[11px] text-rose-500 font-medium">* บันทึกสินค้าต่อรอบ & สลับทีมช่าง</span>
             </div>
 
-            {/* Brand Direct Text Input */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                สินค้าที่ใช้ แบรนด์ไหน <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.productBrand || ''}
-                onChange={(e) => setFormData({ ...formData, productBrand: e.target.value })}
-                placeholder="กรอกชื่อแบรนด์สินค้า เช่น Daikin, SCG, TOA, Mitsubishi, Schneider, TOSTEM, Hafele..."
-                className={`w-full text-sm px-3.5 py-2.5 bg-white border ${
-                  errors.productBrand ? 'border-rose-400 ring-1 ring-rose-300' : 'border-slate-300'
-                } rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none`}
-              />
-              {errors.productBrand && <p className="text-xs text-rose-600 mt-1">{errors.productBrand}</p>}
+            {/* Work Rounds & Multi-Item Product Editor */}
+            <WorkRoundsEditor
+              rounds={rounds}
+              onChange={handleRoundsChange}
+              currentJobStatus={formData.status as JobStatus}
+              defaultAssignedTo={formData.assignedTo}
+            />
 
-              {/* Quick suggestion chips */}
-              <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                <span className="text-[11px] text-slate-400">แนะนำ:</span>
-                {['Daikin', 'SCG / COTTO', 'TOA', 'Mitsubishi Electric', 'Schneider Electric', 'Carrier', 'Hafele', 'Panasonic'].map((b) => (
-                  <button
-                    key={b}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, productBrand: b })}
-                    className="text-[11px] px-2 py-0.5 bg-white hover:bg-sky-50 hover:text-sky-700 hover:border-sky-300 border border-slate-200 text-slate-600 rounded-md transition-colors"
-                  >
-                    + {b}
-                  </button>
-                ))}
+            {/* Summary Brand & Details Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  แบรนด์สินค้าหลัก <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.productBrand || ''}
+                  onChange={(e) => setFormData({ ...formData, productBrand: e.target.value })}
+                  placeholder="เช่น SCG / COTTO, Daikin, TOA, Schneider"
+                  className={`w-full text-sm px-3.5 py-2 bg-white border ${
+                    errors.productBrand ? 'border-rose-400' : 'border-slate-300'
+                  } rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none font-medium`}
+                />
+                {errors.productBrand && <p className="text-xs text-rose-600 mt-1">{errors.productBrand}</p>}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  สรุปรายละเอียดสินค้าสำหรับ LINE Flex / รายงาน
+                </label>
+                <input
+                  type="text"
+                  value={formData.productDetails || ''}
+                  onChange={(e) => setFormData({ ...formData, productDetails: e.target.value })}
+                  placeholder="เช่น ปูนซีเมนต์ 15 ถุง, กระเบื้อง 45 กล่อง"
+                  className="w-full text-sm px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                />
               </div>
             </div>
 
-            {/* Product Details */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                รายการสินค้า / รุ่น / ปริมาณ
-              </label>
-              <input
-                type="text"
-                value={formData.productDetails || ''}
-                onChange={(e) => setFormData({ ...formData, productDetails: e.target.value })}
-                placeholder="เช่น Daikin Inverter 18000 BTU, กระเบื้อง COTTO 60x60 cm. 20 กล่อง"
-                className="w-full text-sm px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none"
-              />
-            </div>
-
             {/* Price (THB) & Payment Type */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  ราคาเท่าไหร่ (บาท THB) <span className="text-rose-500">*</span>
+                  ยอดรวมทั้งสิ้น (บาท THB) <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-2.5 text-sm font-bold text-slate-400">฿</span>
@@ -491,20 +593,9 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                   />
                 </div>
                 {errors.price && <p className="text-xs text-rose-600 mt-1">{errors.price}</p>}
-
-                {/* Quick Price Buttons */}
-                <div className="flex gap-1.5 mt-1.5">
-                  {[5000, 15000, 25000, 50000, 100000].map((amt) => (
-                    <button
-                      key={amt}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, price: amt })}
-                      className="text-[10px] px-2 py-0.5 bg-slate-200/70 hover:bg-slate-300 text-slate-700 rounded-md font-medium"
-                    >
-                      +{(amt / 1000).toFixed(0)}k
-                    </button>
-                  ))}
-                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  * คำนวณจากยอดรวมสินค้าทุกรอบอัตโนมัติ หรือสามารถพิมพ์แก้ไขเองได้
+                </p>
               </div>
 
               {/* Payment Type (สด หรือ เครดิต) */}
@@ -563,7 +654,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-sky-600 shrink-0" />
               <span>
-                เมื่อกดบันทึก ข้อมูลจะจัดเก็บลง <strong>Firebase Cloud Database</strong> แบบเรียลไทม์ และส่ง <strong>LINE Flex Message</strong> แจ้งเตือนเข้ากลุ่มทันที
+                ระบบจะบันทึกลง <strong>Firebase Cloud Database</strong>, บันทึก <strong>Audit Log</strong> และส่ง <strong>LINE Flex Message</strong> แจ้งเตือนเข้ากลุ่มทันที
               </span>
             </div>
           </div>

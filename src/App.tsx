@@ -7,6 +7,7 @@ import { LineFlexSimulator } from './components/LineFlexSimulator';
 import { JobFormModal } from './components/JobFormModal';
 import { JobDetailModal } from './components/JobDetailModal';
 import { FirebaseSettingsModal } from './components/FirebaseSettingsModal';
+import { AuditLogModal } from './components/AuditLogModal';
 import { INITIAL_JOBS, INITIAL_SETTINGS } from './data/initialData';
 import { JobItem, JobStatus, SyncSettings } from './types';
 import {
@@ -17,7 +18,8 @@ import {
 } from './utils/firebaseSync';
 import { sendLineFlexDirect } from './utils/lineFlexSender';
 import { exportJobsToExcel } from './utils/excelExport';
-import { sortJobsLatestFirst } from './utils/formatters';
+import { sortJobsLatestFirst, getStatusConfig } from './utils/formatters';
+import { addAuditLog } from './utils/auditLogger';
 import {
   CheckCircle2,
   AlertCircle,
@@ -74,6 +76,7 @@ export default function App() {
   const [editingJob, setEditingJob] = useState<JobItem | null>(null);
   const [viewingJob, setViewingJob] = useState<JobItem | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [linePreviewJob, setLinePreviewJob] = useState<JobItem | null>(null);
   const [isQuickSyncing, setIsQuickSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(new Date());
@@ -171,6 +174,15 @@ export default function App() {
           setJobs((prev) => sortJobsLatestFirst(prev.map((j) => (j.id === result.job!.id ? result.job! : j))));
         }
         showToast(`💬 ส่ง LINE Flex เข้ากลุ่มเรียบร้อยแล้ว (${job.jobCode})`, 'success');
+        addAuditLog({
+          userName: settings.currentUser || 'เจ้าหน้าที่ระบบ',
+          action: 'line_notify',
+          actionLabel: 'ส่ง LINE Flex',
+          jobCode: job.jobCode,
+          jobTitle: job.title,
+          jobId: job.id,
+          details: `ส่งการ์ด Flex Message เข้ากลุ่ม LINE (${targetId})`,
+        });
       } else {
         showToast(result.message, 'error');
       }
@@ -180,7 +192,6 @@ export default function App() {
   };
 
   // 2. เมื่อมีการบันทึกงานใหม่ (Create New Job) หรือแก้ไขข้อมูลงาน (Edit Job)
-  // บันทึกลง Firebase Firestore Cloud ทันที + ส่ง LINE Flex แจ้งเตือนเข้ากลุ่ม
   const handleSaveJob = async (savedJob: JobItem) => {
     const isEdit = jobs.some((j) => j.id === savedJob.id);
 
@@ -227,12 +238,14 @@ export default function App() {
   };
 
   // 3. เมื่ออัพเดตสถานะของงาน (Quick Status Change)
-  // บันทึกสถานะใหม่ลง Firebase Cloud ทันที + ส่ง LINE Flex แจ้งเตือนเข้ากลุ่ม
   const handleQuickStatusChange = async (id: string, newStatus: JobStatus) => {
     let updatedTarget: JobItem | null = null;
+    let oldStatus: JobStatus | undefined;
+
     setJobs((prev) => {
       const updatedList = prev.map((j) => {
         if (j.id === id) {
+          oldStatus = j.status;
           const updated = {
             ...j,
             status: newStatus,
@@ -255,9 +268,23 @@ export default function App() {
     showToast('⚡ อัพเดทสถานะลง Firebase และส่ง LINE แจ้งเตือนแล้ว', 'success');
 
     if (updatedTarget) {
+      const tgt = updatedTarget as JobItem;
+      // 📜 Audit Log
+      addAuditLog({
+        userName: settings.currentUser || 'เจ้าหน้าที่ระบบ',
+        action: 'status_change',
+        actionLabel: 'เปลี่ยนสถานะด่วน',
+        jobCode: tgt.jobCode,
+        jobTitle: tgt.title,
+        jobId: tgt.id,
+        details: `เปลี่ยนสถานะเป็น "${getStatusConfig(newStatus).label}"`,
+        statusBefore: oldStatus,
+        statusAfter: newStatus,
+      });
+
       // 1. บันทึกลง Firebase Firestore
       try {
-        await saveJobToFirebase(updatedTarget);
+        await saveJobToFirebase(tgt);
         setLastSyncedAt(new Date());
       } catch (fbErr) {
         console.warn('Firebase status update failed:', fbErr);
@@ -266,7 +293,7 @@ export default function App() {
       // 2. ส่งแจ้งเตือน LINE
       try {
         const targetId = settings.lineTargetGroupId || settings.lineTargetUserId || INITIAL_SETTINGS.lineTargetGroupId;
-        await sendLineFlexDirect(updatedTarget, {
+        await sendLineFlexDirect(tgt, {
           targetId,
           channelAccessToken: settings.lineChannelAccessToken || INITIAL_SETTINGS.lineChannelAccessToken,
           companyName: settings.companyName || INITIAL_SETTINGS.companyName,
@@ -285,6 +312,19 @@ export default function App() {
     const updatedJobs = jobs.filter((j) => j.id !== id);
     setJobs(updatedJobs);
     showToast(`ลบงาน "${target?.title || id}" เรียบร้อย`, 'info');
+
+    if (target) {
+      addAuditLog({
+        userName: settings.currentUser || 'เจ้าหน้าที่ระบบ',
+        action: 'delete_job',
+        actionLabel: 'ลบงาน',
+        jobCode: target.jobCode,
+        jobTitle: target.title,
+        jobId: target.id,
+        details: `ลบข้อมูลงานออกจากระบบ (ยอดเงิน ฿${target.price.toLocaleString()})`,
+        statusBefore: target.status,
+      });
+    }
 
     // ลบจาก Firebase Firestore
     try {
@@ -355,6 +395,7 @@ export default function App() {
           setIsFormModalOpen(true);
         }}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onOpenAuditLogs={() => setIsAuditModalOpen(true)}
         jobs={jobs}
         settings={settings}
       />
@@ -514,6 +555,12 @@ export default function App() {
         onQuickStatusChange={handleQuickStatusChange}
         onSendLinePreview={handleOpenLineFlex}
         onDirectSendLine={handleDirectSendLineFlex}
+      />
+
+      {/* Audit Log Modal */}
+      <AuditLogModal
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
       />
 
       {/* Firebase & LINE Settings Modal */}

@@ -17,7 +17,9 @@ import {
   Printer,
   Send,
   Camera,
-  Share2,
+  Layers,
+  ShoppingBag,
+  Plus,
   Navigation,
 } from 'lucide-react';
 import { JobItem, JobPhoto, JobStatus } from '../types';
@@ -50,15 +52,18 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
   const paymentCfg = getPaymentTypeConfig(job.paymentType);
   const googleMapsUrl = `https://www.google.com/maps?q=${job.location.lat},${job.location.lng}`;
 
-  const allStatuses: JobStatus[] = ['pending', 'in_progress', 'review', 'completed', 'issue'];
+  const coreStatuses: JobStatus[] = ['pending', 'quotation', 'follow_up', 'closed_deal'];
 
   const handlePrint = () => {
     window.print();
   };
 
+  const rounds = job.workRounds || [];
+  const totalProducts = rounds.reduce((sum, r) => sum + (r.products?.length || 0), 0);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-fade-in">
-      <div className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col my-auto">
+      <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col my-auto">
         {/* Modal Top Header */}
         <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-sky-900 text-white flex items-center justify-between shrink-0">
           <div>
@@ -96,7 +101,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <span className="text-xs font-semibold text-slate-600">อัพเดทสถานะงานแบบด่วน:</span>
             <div className="flex flex-wrap gap-1.5">
-              {allStatuses.map((st) => {
+              {coreStatuses.map((st) => {
                 const cfg = getStatusConfig(st);
                 const isActive = job.status === st;
                 return (
@@ -110,7 +115,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                     }`}
                   >
                     <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${cfg.badgeBg}`} />
-                    <span>{cfg.shortLabel}</span>
+                    <span>{cfg.label}</span>
                   </button>
                 );
               })}
@@ -148,8 +153,10 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                   <span>{job.time} น.</span>
                 </div>
                 {job.assignedTo && (
-                  <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
-                    👷 ช่างผู้รับผิดชอบ: <strong className="text-slate-800">{job.assignedTo}</strong>
+                  <div className="text-[11px] text-slate-600 pt-1 border-t border-slate-200/60 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>ทีมช่างหลัก:</span>
+                    <strong className="text-slate-900">{job.assignedTo}</strong>
                   </div>
                 )}
               </div>
@@ -168,11 +175,11 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                 {job.productDetails && (
                   <div className="flex items-start justify-between">
                     <span className="text-slate-500">รายละเอียด:</span>
-                    <span className="font-medium text-right max-w-[180px]">{job.productDetails}</span>
+                    <span className="font-medium text-right max-w-[200px]">{job.productDetails}</span>
                   </div>
                 )}
                 <div className="flex items-center justify-between pt-1 border-t border-slate-200">
-                  <span className="text-slate-500">ราคางาน:</span>
+                  <span className="text-slate-500">ยอดรวมทั้งสิ้น:</span>
                   <span className="text-base font-bold text-emerald-600">{formatCurrency(job.price)}</span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -183,6 +190,116 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Work Rounds & Multi-Item Product Breakdown */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-indigo-600" />
+                <span>
+                  รอบการเข้าหน้างาน & รายการสินค้า ({rounds.length} รอบ, {totalProducts} รายการสินค้า)
+                </span>
+              </h4>
+
+              <button
+                onClick={() => {
+                  onClose();
+                  onEdit(job);
+                }}
+                className="text-xs text-sky-600 hover:text-sky-700 font-semibold inline-flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ เพิ่มรอบ / สินค้า</span>
+              </button>
+            </div>
+
+            {rounds.length > 0 ? (
+              <div className="space-y-3">
+                {rounds.map((round) => {
+                  const rStCfg = getStatusConfig(round.status);
+                  return (
+                    <div
+                      key={round.id}
+                      className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs"
+                    >
+                      {/* Round Header */}
+                      <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-slate-800 text-white font-bold flex items-center justify-center text-[10px]">
+                            {round.roundNumber}
+                          </span>
+                          <span className="font-bold text-slate-800">{round.title}</span>
+                          <span className={`text-[10px] px-2 py-0.2 rounded-full font-bold border ${rStCfg.bgClass}`}>
+                            {rStCfg.label}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                          <span className="flex items-center gap-1">
+                            <User className="w-3 h-3 text-indigo-600" />
+                            <strong className="text-slate-700">{round.teamName}</strong>
+                          </span>
+                          <span>📅 {formatThaiDate(round.date, 'short')}</span>
+                          <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            ฿{round.roundTotalCost.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Products List in this round */}
+                      {round.products && round.products.length > 0 ? (
+                        <div className="p-3 divide-y divide-slate-100">
+                          {round.products.map((prod) => {
+                            const prodStCfg = getStatusConfig(prod.statusAtAdd || round.status);
+                            return (
+                              <div
+                                key={prod.id}
+                                className="py-2 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                              >
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-slate-800">{prod.brand}</span>
+                                    <span className="text-slate-700">{prod.name}</span>
+                                    <span
+                                      className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold border ${prodStCfg.bgClass}`}
+                                    >
+                                      เพิ่มตอน: {prodStCfg.label}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 flex items-center gap-2">
+                                    <span>
+                                      จำนวน: {prod.quantity} {prod.unit} @ ฿{prod.unitPrice?.toLocaleString()}
+                                    </span>
+                                    <span>•</span>
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="w-3 h-3" />
+                                      <span>{prod.addedAt}</span>
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="font-bold text-emerald-700 text-xs sm:text-right">
+                                  ฿{prod.totalPrice?.toLocaleString()}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="p-2.5 text-center text-slate-400 text-xs">
+                          รอบนี้ไม่มีรายการเบิกสินค้า
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-400">
+                ยังไม่มีการบันทึกรอบงาน
+              </div>
+            )}
           </div>
 
           {/* Location & GPS */}
@@ -302,7 +419,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
               className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
             >
               <Edit2 className="w-3.5 h-3.5" />
-              <span>แก้ไขข้อมูล</span>
+              <span>แก้ไขข้อมูล / เพิ่มรอบ</span>
             </button>
           </div>
         </div>

@@ -1,15 +1,18 @@
-import { JobItem, SyncSettings } from '../types';
+import { JobItem, SyncSettings, WorkRound, ProductItem } from '../types';
 
 export const INITIAL_SETTINGS: SyncSettings = {
   companyName: 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
-  googleSheetUrl: 'https://script.google.com/macros/s/AKfycbzZGiyeLCwTUxLFG0NTrU2GFhz2kvmyS1BQaYqHil-jDpcnNwPtu1U8LPZtGmJypEHZ/exec',
+  googleSheetUrl:
+    'https://script.google.com/macros/s/AKfycbzZGiyeLCwTUxLFG0NTrU2GFhz2kvmyS1BQaYqHil-jDpcnNwPtu1U8LPZtGmJypEHZ/exec',
   appSheetWebhookUrl: '',
   lineNotifyToken: '',
-  lineChannelAccessToken: 'JOdpOQkd0rtaYfPfGVLwZj9LMshtp010Hgb5DsM9HmRmtDWqrSJFTVjXLd6mLmhS3bCmWfTIKeHkC3yhWVMGXKP/R7HhnWEizWvqnxi8EWa/jMVUKxz1mck/P+8/LvTaHJl/Fpq0P7Okf547iIlW2wdB04t89/1O/w1cDnyilFU=',
+  lineChannelAccessToken:
+    'JOdpOQkd0rtaYfPfGVLwZj9LMshtp010Hgb5DsM9HmRmtDWqrSJFTVjXLd6mLmhS3bCmWfTIKeHkC3yhWVMGXKP/R7HhnWEizWvqnxi8EWa/jMVUKxz1mck/P+8/LvTaHJl/Fpq0P7Okf547iIlW2wdB04t89/1O/w1cDnyilFU=',
   lineTargetUserId: 'U54fd541a6cf7746b1b4f0219634c7a53',
   lineTargetGroupId: 'C341417bcb6e853c320eaf9d80963cda3',
   autoSyncSheets: true,
   autoSendLineFlex: true,
+  currentUser: 'สมหมาย (หัวหน้าช่าง)',
 };
 
 export const INITIAL_JOBS: JobItem[] = [
@@ -26,7 +29,7 @@ export const INITIAL_JOBS: JobItem[] = [
       address: '99/12 หมู่บ้านเพอร์เฟคเพลส ถนนรัตนาธิเบศร์ บางรักพัฒนา นนทบุรี',
       lat: 13.8765,
       lng: 100.4412,
-      placeName: 'หมู่บ้านเพอร์เฟคเพลส นนทบุรี'
+      placeName: 'หมู่บ้านเพอร์เฟคเพลส นนทบุรี',
     },
     photos: [
       {
@@ -35,7 +38,7 @@ export const INITIAL_JOBS: JobItem[] = [
         caption: 'ติดตั้งคอมเพรสเซอร์และท่อน้ำยาเรียบร้อย',
         tag: 'after',
         timestamp: '2026-09-10 11:45',
-        source: 'camera'
+        source: 'camera',
       },
       {
         id: 'p2',
@@ -43,23 +46,95 @@ export const INITIAL_JOBS: JobItem[] = [
         caption: 'จุดติดตั้งแฟนคอยล์ภายในห้องนอนใหญ่',
         tag: 'during',
         timestamp: '2026-09-10 10:15',
-        source: 'camera'
-      }
+        source: 'camera',
+      },
     ],
     productBrand: 'Daikin',
-    productDetails: 'Daikin FTKF-WV2S Inverter 18,100 BTU + ขาแขวนมาตรฐาน',
+    productDetails: 'Daikin Inverter 18,100 BTU + ขาแขวนมาตรฐาน + ท่อน้ำยา 4 ม.',
     price: 26500,
     paymentType: 'cash',
     notes: 'ทดสอบระบบความเย็นและระบบระบายน้ำทิ้งผ่านเกณฑ์ ลูกค้าชำระเงินสดครบถ้วน มอบใบรับประกัน 5 ปี',
-    assignedTo: 'ช่างเอกชัย (ทีม A)',
-    createdAt: '2026-09-10T09:00:00Z',
+    assignedTo: 'ทีมช่างแอร์ (ช่างเอกชัย)',
+    workRounds: [
+      {
+        id: 'r1-1',
+        roundNumber: 1,
+        title: 'รอบที่ 1: งานสำรวจและเดินท่อน้ำยาแอร์',
+        date: '2026-09-08',
+        time: '10:00',
+        teamName: 'ทีมเดินท่อระบบ (ช่างศักดิ์)',
+        status: 'pending',
+        description: 'เจาะผนังเดินท่อน้ำยาและสายไฟคอนโทรลเข้ารางเก็บสายไฟ',
+        roundTotalCost: 4300,
+        createdAt: '2026-09-08T10:00:00Z',
+        products: [
+          {
+            id: 'prod-1-1',
+            brand: 'Daikin',
+            name: 'ชุดท่อน้ำยาแอร์ทองแดงหนา 0.7 มม. (ยาว 4 ม.)',
+            quantity: 1,
+            unit: 'ชุด',
+            unitPrice: 3500,
+            totalPrice: 3500,
+            addedAt: '2026-09-08 10:30',
+            statusAtAdd: 'pending',
+            roundNumber: 1,
+            roundTitle: 'งานสำรวจและเดินท่อน้ำยาแอร์',
+            teamName: 'ทีมเดินท่อระบบ (ช่างศักดิ์)',
+          },
+          {
+            id: 'prod-1-2',
+            brand: 'SCG',
+            name: 'รางครอบท่อแอร์และข้องอเก็บมุม',
+            quantity: 2,
+            unit: 'เส้น',
+            unitPrice: 400,
+            totalPrice: 800,
+            addedAt: '2026-09-08 11:00',
+            statusAtAdd: 'pending',
+            roundNumber: 1,
+            roundTitle: 'งานสำรวจและเดินท่อน้ำยาแอร์',
+            teamName: 'ทีมเดินท่อระบบ (ช่างศักดิ์)',
+          },
+        ],
+      },
+      {
+        id: 'r1-2',
+        roundNumber: 2,
+        title: 'รอบที่ 2: งานติดตั้งตัวเครื่องและระบบไฟฟ้า',
+        date: '2026-09-10',
+        time: '09:30',
+        teamName: 'ทีมช่างแอร์ (ช่างเอกชัย)',
+        status: 'closed_deal',
+        description: 'ติดตั้งตัวเครื่องแฟนคอยล์และคอนเดนซิ่ง พร้อมแวคคั่มระบบเติมน้ำยา R32',
+        roundTotalCost: 22200,
+        createdAt: '2026-09-10T09:30:00Z',
+        products: [
+          {
+            id: 'prod-1-3',
+            brand: 'Daikin',
+            name: 'Daikin FTKF-WV2S Inverter 18,100 BTU',
+            quantity: 1,
+            unit: 'เครื่อง',
+            unitPrice: 22200,
+            totalPrice: 22200,
+            addedAt: '2026-09-10 09:45',
+            statusAtAdd: 'closed_deal',
+            roundNumber: 2,
+            roundTitle: 'งานติดตั้งตัวเครื่องและระบบไฟฟ้า',
+            teamName: 'ทีมช่างแอร์ (ช่างเอกชัย)',
+          },
+        ],
+      },
+    ],
+    createdAt: '2026-09-08T09:00:00Z',
     updatedAt: '2026-09-10T12:30:00Z',
-    syncStatus: 'synced'
+    syncStatus: 'synced',
   },
   {
     id: 'job-2',
     jobCode: 'JOB-2026-0902',
-    title: 'งานปูกระเบื้องแกรนิตโต้และสุขภัณฑ์ โครงการรีโนเวททาวน์โฮม',
+    title: 'งานเทพื้นคอนกรีตและปูกระเบื้อง ทาวน์โฮมสุขุมวิท',
     contactPerson: 'คุณกัญญาภัค พรหมวิชัย (โฟร์แมน)',
     phoneNumber: '089-772-1134',
     date: '2026-09-11',
@@ -69,7 +144,7 @@ export const INITIAL_JOBS: JobItem[] = [
       address: '45/8 ซอยสุขุมวิท 101/1 แขวงบางจาก เขตพระโขนง กรุงเทพมหานคร',
       lat: 13.6872,
       lng: 100.6154,
-      placeName: 'โครงการบ้านสุขุมวิท 101/1'
+      placeName: 'โครงการบ้านสุขุมวิท 101/1',
     },
     photos: [
       {
@@ -78,18 +153,104 @@ export const INITIAL_JOBS: JobItem[] = [
         caption: 'ตรวจสอบระดับพื้นและการปรับระดับปูนกาว SCG',
         tag: 'during',
         timestamp: '2026-09-11 13:30',
-        source: 'camera'
-      }
+        source: 'camera',
+      },
     ],
     productBrand: 'SCG / COTTO',
-    productDetails: 'กระเบื้องปูพื้น COTTO 60x60 cm. + ปูนกาวซีเมนต์ SCG แดง 15 ถุง',
+    productDetails: 'กระเบื้อง COTTO 60x60 cm. (45 กล่อง) + ปูนซีเมนต์ SCG แดง (15 ถุง) + ปูนกาว',
     price: 48900,
     paymentType: 'credit_30',
     notes: 'ส่งใบเสนอราคาปูกระเบื้องบริเวณโถงชั้น 1 เครดิตเทอม 30 วัน',
-    assignedTo: 'ช่างวิทย์ (ทีมงานช่างปูน)',
-    createdAt: '2026-09-11T11:00:00Z',
+    assignedTo: 'ทีมงานช่างกระเบื้อง (ช่างมนัส)',
+    workRounds: [
+      {
+        id: 'r2-1',
+        roundNumber: 1,
+        title: 'รอบที่ 1: งานเทพื้นปรับระดับและฐานราก',
+        date: '2026-09-09',
+        time: '08:30',
+        teamName: 'ทีมช่างปูน (ช่างวิทย์)',
+        status: 'pending',
+        description: 'ลงทราย ปรับระดับ และเทคอนกรีตผสมเสร็จพร้อมวางไวร์เมช',
+        roundTotalCost: 7900,
+        createdAt: '2026-09-09T08:30:00Z',
+        products: [
+          {
+            id: 'prod-2-1',
+            brand: 'SCG',
+            name: 'ปูนซีเมนต์ SCG ซูเปอร์ แดง',
+            quantity: 15,
+            unit: 'ถุง',
+            unitPrice: 150,
+            totalPrice: 2250,
+            addedAt: '2026-09-09 09:00',
+            statusAtAdd: 'pending',
+            roundNumber: 1,
+            roundTitle: 'งานเทพื้นปรับระดับและฐานราก',
+            teamName: 'ทีมช่างปูน (ช่างวิทย์)',
+          },
+          {
+            id: 'prod-2-2',
+            brand: 'SCG',
+            name: 'ตะแกรงเหล็กไวร์เมช (Wiremesh) 4 มม.',
+            quantity: 2,
+            unit: 'ม้วน',
+            unitPrice: 2825,
+            totalPrice: 5650,
+            addedAt: '2026-09-09 09:30',
+            statusAtAdd: 'pending',
+            roundNumber: 1,
+            roundTitle: 'งานเทพื้นปรับระดับและฐานราก',
+            teamName: 'ทีมช่างปูน (ช่างวิทย์)',
+          },
+        ],
+      },
+      {
+        id: 'r2-2',
+        roundNumber: 2,
+        title: 'รอบที่ 2: งานปูกระเบื้องและยาแนวโถงรับแขก',
+        date: '2026-09-11',
+        time: '13:00',
+        teamName: 'ทีมงานช่างกระเบื้อง (ช่างมนัส)',
+        status: 'quotation',
+        description: 'ปูกระเบื้องแกรนิตโต้ 60x60 ซม. พร้อมเก็บขอบบัวเชิงผนัง',
+        roundTotalCost: 41000,
+        createdAt: '2026-09-11T13:00:00Z',
+        products: [
+          {
+            id: 'prod-2-3',
+            brand: 'COTTO',
+            name: 'กระเบื้องปูพื้น COTTO 60x60 cm. ลายหินอ่อน',
+            quantity: 45,
+            unit: 'กล่อง',
+            unitPrice: 850,
+            totalPrice: 38250,
+            addedAt: '2026-09-11 13:15',
+            statusAtAdd: 'quotation',
+            roundNumber: 2,
+            roundTitle: 'รอบที่ 2: งานปูกระเบื้องและยาแนวโถงรับแขก',
+            teamName: 'ทีมงานช่างกระเบื้อง (ช่างมนัส)',
+          },
+          {
+            id: 'prod-2-4',
+            brand: 'SCG',
+            name: 'ปูนกาวซีเมนต์ SCG ปูกระเบื้องแกรนิตโต้',
+            quantity: 11,
+            unit: 'ถุง',
+            unitPrice: 250,
+            totalPrice: 2750,
+            addedAt: '2026-09-11 13:30',
+            statusAtAdd: 'quotation',
+            roundNumber: 2,
+            roundTitle: 'รอบที่ 2: งานปูกระเบื้องและยาแนวโถงรับแขก',
+            teamName: 'ทีมงานช่างกระเบื้อง (ช่างมนัส)',
+          },
+        ],
+      },
+    ],
+    createdAt: '2026-09-09T08:00:00Z',
     updatedAt: '2026-09-11T14:15:00Z',
-    syncStatus: 'synced'
+    syncStatus: 'synced',
   },
   {
     id: 'job-3',
@@ -104,7 +265,7 @@ export const INITIAL_JOBS: JobItem[] = [
       address: '188 นิคมอุตสาหกรรมบางปู ซอย 9C ตำบลแพรกษา อำเภอเมือง สมุทรปราการ',
       lat: 13.5381,
       lng: 100.6725,
-      placeName: 'โรงงานไทยอินดัสเตรียล บางปู'
+      placeName: 'โรงงานไทยอินดัสเตรียล บางปู',
     },
     photos: [
       {
@@ -113,8 +274,8 @@ export const INITIAL_JOBS: JobItem[] = [
         caption: 'ประกอบชุด Circuit Breaker และ Busbar เรียบร้อย',
         tag: 'after',
         timestamp: '2026-09-11 16:00',
-        source: 'gallery'
-      }
+        source: 'gallery',
+      },
     ],
     productBrand: 'Schneider Electric',
     productDetails: 'ตู้คอนซูเมอร์ยูนิตและเบรกเกอร์ Schneider 3 Phase 100A พร้อมระบบกันดูด RCBO',
@@ -122,9 +283,53 @@ export const INITIAL_JOBS: JobItem[] = [
     paymentType: 'credit_45',
     notes: 'ติดตามซ้ำเรื่องการอนุมัติสเปกตู้และค่าความต้านทานดิน เครดิต 45 วัน',
     assignedTo: 'ช่างนพดล (ทีมวิศวกรรมไฟฟ้า)',
+    workRounds: [
+      {
+        id: 'r3-1',
+        roundNumber: 1,
+        title: 'รอบที่ 1: ติดตั้งตู้ MDB และเบรกเกอร์เมน',
+        date: '2026-09-11',
+        time: '14:00',
+        teamName: 'ช่างนพดล (ทีมวิศวกรรมไฟฟ้า)',
+        status: 'follow_up',
+        description: 'ประกอบตู้ Schneider 3 Phase พร้อมเดินสายเมนทองแดง THW 50 sq.mm.',
+        roundTotalCost: 85000,
+        createdAt: '2026-09-11T14:00:00Z',
+        products: [
+          {
+            id: 'prod-3-1',
+            brand: 'Schneider Electric',
+            name: 'ตู้คอนซูเมอร์ยูนิตและเมนเบรกเกอร์ Schneider 3 Phase 100A',
+            quantity: 1,
+            unit: 'ตู้',
+            unitPrice: 65000,
+            totalPrice: 65000,
+            addedAt: '2026-09-11 14:30',
+            statusAtAdd: 'follow_up',
+            roundNumber: 1,
+            roundTitle: 'ติดตั้งตู้ MDB และเบรกเกอร์เมน',
+            teamName: 'ช่างนพดล (ทีมวิศวกรรมไฟฟ้า)',
+          },
+          {
+            id: 'prod-3-2',
+            brand: 'Schneider Electric',
+            name: 'ชุดเบรกเกอร์ย่อย RCBO ป้องกันไฟดูด 16A/20A/32A',
+            quantity: 10,
+            unit: 'ตัว',
+            unitPrice: 2000,
+            totalPrice: 20000,
+            addedAt: '2026-09-11 15:00',
+            statusAtAdd: 'follow_up',
+            roundNumber: 1,
+            roundTitle: 'ติดตั้งตู้ MDB และเบรกเกอร์เมน',
+            teamName: 'ช่างนพดล (ทีมวิศวกรรมไฟฟ้า)',
+          },
+        ],
+      },
+    ],
     createdAt: '2026-09-11T14:00:00Z',
     updatedAt: '2026-09-11T16:30:00Z',
-    syncStatus: 'synced'
+    syncStatus: 'synced',
   },
   {
     id: 'job-4',
@@ -139,7 +344,7 @@ export const INITIAL_JOBS: JobItem[] = [
       address: '12/4 ถนนพหลโยธิน แขวงลาดยาว เขตจตุจักร กรุงเทพฯ',
       lat: 13.8282,
       lng: 100.5678,
-      placeName: 'อาคารพาณิชย์ พหลโยธิน'
+      placeName: 'อาคารพาณิชย์ พหลโยธิน',
     },
     photos: [
       {
@@ -148,8 +353,8 @@ export const INITIAL_JOBS: JobItem[] = [
         caption: 'จัดส่งสีและอุปกรณ์ครบ 30 ถัง',
         tag: 'site_overview',
         timestamp: '2026-09-08 10:40',
-        source: 'camera'
-      }
+        source: 'camera',
+      },
     ],
     productBrand: 'TOA',
     productDetails: 'TOA SuperShield Titanium สีกึ่งเงา ขนาด 5 แกลลอน จำนวน 20 ถัง + สีรองพื้นปูนเก่า 10 ถัง',
@@ -159,7 +364,7 @@ export const INITIAL_JOBS: JobItem[] = [
     assignedTo: 'ทีมจัดส่ง สายเหนือ',
     createdAt: '2026-09-08T09:15:00Z',
     updatedAt: '2026-09-08T11:00:00Z',
-    syncStatus: 'synced'
+    syncStatus: 'synced',
   },
   {
     id: 'job-5',
@@ -174,7 +379,7 @@ export const INITIAL_JOBS: JobItem[] = [
       address: '88/2 หมู่ 3 ถนนบางนา-ตราด กม.19 บางพลี สมุทรปราการ',
       lat: 13.6145,
       lng: 100.7489,
-      placeName: 'คลังสินค้า บางนา กม.19'
+      placeName: 'คลังสินค้า บางนา กม.19',
     },
     photos: [
       {
@@ -183,8 +388,8 @@ export const INITIAL_JOBS: JobItem[] = [
         caption: 'จุดเสาไฟภายนอกสำหรับติดตั้งกล้องระยะไกล 80m',
         tag: 'before',
         timestamp: '2026-09-09 14:20',
-        source: 'gallery'
-      }
+        source: 'gallery',
+      },
     ],
     productBrand: 'Hikvision',
     productDetails: 'Hikvision ColorVu IP Camera 4MP 16 ตัว + NVR 16CH 4K + PoE Switch',
@@ -194,78 +399,8 @@ export const INITIAL_JOBS: JobItem[] = [
     assignedTo: 'ช่างเกรียงไกร (ทีมระบบ Security)',
     createdAt: '2026-09-09T14:00:00Z',
     updatedAt: '2026-09-09T14:40:00Z',
-    syncStatus: 'pending'
+    syncStatus: 'pending',
   },
-  {
-    id: 'job-6',
-    jobCode: 'JOB-2026-0828',
-    title: 'งานเปลี่ยนปั๊มน้ำบ้านและถังเก็บน้ำสแตนเลส',
-    contactPerson: 'คุณรัตนาภรณ์',
-    phoneNumber: '082-998-3344',
-    date: '2026-08-28',
-    time: '11:00',
-    status: 'closed_deal',
-    location: {
-      address: '22/19 ถนนพระราม 2 ซอย 50 แขวงแสมดำ เขตบางขุนเทียน กทม.',
-      lat: 13.6621,
-      lng: 100.4352,
-      placeName: 'บ้านพัก พระราม 2'
-    },
-    photos: [
-      {
-        id: 'p7',
-        url: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=800&q=80',
-        caption: 'ติดตั้งปั๊มน้ำ Mitsubishi และเดินท่อบายพาส',
-        tag: 'after',
-        timestamp: '2026-08-28 13:00',
-        source: 'camera'
-      }
-    ],
-    productBrand: 'Mitsubishi Electric',
-    productDetails: 'ปั๊มน้ำอัตโนมัติ Mitsubishi EP-305R 300W + ถังเก็บน้ำ DOS 1000L',
-    price: 19800,
-    paymentType: 'cash',
-    notes: 'ติดตั้งพร้อมเดินระบบท่อบายพาสสลับน้ำประปา ทดสอบแรงดันน้ำไหลสม่ำเสมอทุกจุด',
-    assignedTo: 'ช่างเอกชัย (ทีม A)',
-    createdAt: '2026-08-28T09:00:00Z',
-    updatedAt: '2026-08-28T14:00:00Z',
-    syncStatus: 'synced'
-  },
-  {
-    id: 'job-7',
-    jobCode: 'JOB-2026-0815',
-    title: 'งานซ่อมแก้ไขปัญหารอยรั่วซึมหลังคาและฝ้าเพดาน',
-    contactPerson: 'คุณธีรศักดิ์',
-    phoneNumber: '083-441-2299',
-    date: '2026-08-15',
-    time: '14:00',
-    status: 'closed_deal',
-    location: {
-      address: '77/5 ลาดพร้าว 71 แขวงสะพานสอง เขตวังทองหลาง กทม.',
-      lat: 13.7915,
-      lng: 100.6087,
-      placeName: 'ทาวน์โฮม ลาดพร้าว 71'
-    },
-    photos: [
-      {
-        id: 'p8',
-        url: 'https://images.unsplash.com/photo-1613545325278-f24b0cae1224?auto=format&fit=crop&w=800&q=80',
-        caption: 'ซีลกันซึมอะคริลิกและเปลี่ยนแผ่นฝ้าเรียบร้อย',
-        tag: 'after',
-        timestamp: '2026-08-15 16:30',
-        source: 'camera'
-      }
-    ],
-    productBrand: 'TOA',
-    productDetails: 'TOA PU Waterproof กันซึมโพลียูรีเทน + แผ่นยิปซัมตราช้าง 9 มม.',
-    price: 14500,
-    paymentType: 'credit_7',
-    notes: 'ทากันซึม 3 ชั้น เสริมตาข่ายไฟเบอร์ รับประกันงานซ่อม 1 ปี',
-    assignedTo: 'ช่างวิทย์ (ทีมงานช่างปูน)',
-    createdAt: '2026-08-15T13:00:00Z',
-    updatedAt: '2026-08-15T17:00:00Z',
-    syncStatus: 'synced'
-  }
 ];
 
 export const POPULAR_BRANDS = [
@@ -284,5 +419,5 @@ export const POPULAR_BRANDS = [
   'ตราเพชร',
   'DOS',
   'Philips',
-  'อื่นๆ'
+  'อื่นๆ',
 ];
