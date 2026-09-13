@@ -540,40 +540,6 @@ async function directPushLineMessage(targetId: string, token: string, job: any, 
   }
 }
 
-// Function to send data to Google Apps Script Web App
-async function sendToGoogleAppsScript(url: string, payload: any) {
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      body: JSON.stringify(payload),
-      redirect: 'follow',
-    });
-
-    const text = await response.text();
-    let json = null;
-    try {
-      json = JSON.parse(text);
-    } catch {
-      // response might be html or text
-    }
-
-    return {
-      success: response.ok,
-      status: response.status,
-      data: json || text,
-    };
-  } catch (err: any) {
-    console.error('Google Apps Script Proxy Error:', err);
-    return {
-      success: false,
-      error: err.message || String(err),
-    };
-  }
-}
-
 // Persistent shared jobs storage on server (Cross-Device Sync)
 const JOBS_FILE = path.join(os.tmpdir(), 'jobtracker_jobs.json');
 let sharedJobs: any[] = [];
@@ -663,27 +629,10 @@ app.post('/api/sync/save-and-notify', async (req, res) => {
 
   const results: any = {
     success: true,
-    sheetSync: null,
     lineSync: null,
   };
 
-  // 3. Sync to Google Sheets (sending lightweight payload with public image URLs)
-  if (webAppUrl && webAppUrl.startsWith('http')) {
-    const gasPayload = {
-      action: triggerType === 'manual_send' ? 'send_line' : 'save_and_notify',
-      triggerType,
-      job: processedJob,
-      targetId: targetId || DEFAULT_LINE_GROUP,
-      channelAccessToken: channelAccessToken || DEFAULT_LINE_TOKEN,
-      companyName: companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
-      eventLabel,
-      sendLine: sendLine !== false,
-    };
-
-    results.sheetSync = await sendToGoogleAppsScript(webAppUrl, gasPayload);
-  }
-
-  // 4. Direct Push to LINE Messaging API with the real photo URL!
+  // Direct Push to LINE Messaging API with the real photo URL
   if (sendLine !== false) {
     const lineToken = channelAccessToken || DEFAULT_LINE_TOKEN;
     const lineTarget = targetId || DEFAULT_LINE_GROUP;
@@ -823,47 +772,10 @@ app.post('/api/sync/test-line', async (req, res) => {
 });
 
 // ==========================================
-// 🌟 API ROUTE 3: Fetch latest jobs from Google Sheets
-// ==========================================
-app.get('/api/sync/fetch-jobs', async (req, res) => {
-  const webAppUrl = req.query.url as string;
-
-  if (!webAppUrl || !webAppUrl.startsWith('http')) {
-    return res.status(400).json({ success: false, message: 'Invalid Google Apps Script URL' });
-  }
-
-  try {
-    const response = await fetch(webAppUrl, {
-      method: 'GET',
-      headers: {
-        'Cache-Control': 'no-cache',
-      },
-      redirect: 'follow',
-    });
-
-    if (!response.ok) {
-      return res.status(response.status).json({
-        success: false,
-        message: `HTTP ${response.status}: Failed to fetch from Google Sheets`,
-      });
-    }
-
-    const data = await response.json();
-    return res.json(data);
-  } catch (err: any) {
-    console.error('Error fetching jobs via proxy:', err);
-    return res.status(500).json({
-      success: false,
-      message: `ไม่สามารถดึงข้อมูลได้: ${err.message || err}`,
-    });
-  }
-});
-
-// ==========================================
-// 🌟 API ROUTE 4: Test Connection Diagnostics
+// 🌟 API ROUTE 3: Test LINE Bot Connection Diagnostics
 // ==========================================
 app.post('/api/sync/test-connection', async (req, res) => {
-  const { webAppUrl, targetId, channelAccessToken } = req.body;
+  const { targetId, channelAccessToken, companyName } = req.body;
 
   const testJob = {
     jobCode: 'TEST-' + Date.now().toString().slice(-4),
@@ -871,8 +783,8 @@ app.post('/api/sync/test-connection', async (req, res) => {
     status: 'in_progress',
     contactPerson: 'ระบบทดสอบอัตโนมัติ',
     phoneNumber: '081-234-5678',
-    productBrand: 'SCG',
-    productDetails: 'ทดสอบการเชื่อมต่อ Google Sheets & LINE API',
+    productBrand: 'JobTracker',
+    productDetails: 'ทดสอบการเชื่อมต่อ LINE Messaging API สำเร็จ',
     price: 9900,
     paymentType: 'เงินสด',
     location: {
@@ -885,48 +797,22 @@ app.post('/api/sync/test-connection', async (req, res) => {
     time: '12:00',
   };
 
-  const diagnostics: any = {
-    sheetTest: null,
-    lineTest: null,
-  };
-
-  // Test LINE Push
   const lineToken = channelAccessToken || DEFAULT_LINE_TOKEN;
   const lineTarget = targetId || DEFAULT_LINE_GROUP;
-  diagnostics.lineTest = await directPushLineMessage(
+  const lineResult = await directPushLineMessage(
     lineTarget,
     lineToken,
     testJob,
-    'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
-    '🧪 ทดสอบการเชื่อมต่อระบบ'
+    companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด',
+    '🧪 ทดสอบการเชื่อมต่อระบบ LINE Bot'
   );
 
-  // Test Google Sheet Fetch / Ping
-  if (webAppUrl && webAppUrl.startsWith('http')) {
-    try {
-      const sheetRes = await fetch(webAppUrl, { method: 'GET', redirect: 'follow' });
-      const sheetText = await sheetRes.text();
-      let sheetJson = null;
-      try {
-        sheetJson = JSON.parse(sheetText);
-      } catch {}
-
-      diagnostics.sheetTest = {
-        success: sheetRes.ok,
-        status: sheetRes.status,
-        data: sheetJson || sheetText.substring(0, 200),
-      };
-    } catch (err: any) {
-      diagnostics.sheetTest = {
-        success: false,
-        error: err.message || String(err),
-      };
-    }
-  }
-
   return res.json({
-    success: true,
-    diagnostics,
+    success: lineResult.success,
+    message: lineResult.success
+      ? 'ทดสอบเชื่อมต่อ LINE Bot สำเร็จ ข้อความถูกส่งเข้ากลุ่มแล้ว'
+      : (lineResult.error || 'ไม่สามารถส่งข้อความทดสอบ LINE ได้'),
+    diagnostics: { lineTest: lineResult },
   });
 });
 

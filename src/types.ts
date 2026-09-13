@@ -129,16 +129,14 @@ export interface JobItem {
 }
 
 export interface SyncSettings {
-  googleSheetUrl?: string;
-  appSheetWebhookUrl?: string;
-  lineNotifyToken?: string;
   lineChannelAccessToken?: string;
   lineTargetUserId?: string;
   lineTargetGroupId?: string;
-  autoSyncSheets: boolean;
+  lineRelayUrl?: string; // Cloudflare Worker or Backend Relay URL for GitHub Pages / Static hosting
   autoSendLineFlex: boolean;
   companyName: string;
   currentUser?: string; // ผู้ใช้งานปัจจุบันที่บันทึกข้อมูล
+  firebaseProjectId?: string;
 }
 
 export interface LineFlexMessagePayload {

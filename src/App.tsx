@@ -166,6 +166,7 @@ export default function App() {
         targetId,
         channelAccessToken: settings.lineChannelAccessToken || INITIAL_SETTINGS.lineChannelAccessToken,
         companyName: settings.companyName || INITIAL_SETTINGS.companyName,
+        relayUrl: settings.lineRelayUrl,
         eventLabel: customHeader || '📋 รายงานข้อมูลงานหน้างาน',
       });
 
@@ -219,6 +220,7 @@ export default function App() {
         targetId,
         channelAccessToken: settings.lineChannelAccessToken || INITIAL_SETTINGS.lineChannelAccessToken,
         companyName: settings.companyName || INITIAL_SETTINGS.companyName,
+        relayUrl: settings.lineRelayUrl,
         eventLabel: isEdit ? '✏️ อัพเดทข้อมูลงาน' : '🆕 แจ้งเตือนงานใหม่',
       });
 
@@ -227,10 +229,11 @@ export default function App() {
       }
       setLastSyncedAt(new Date());
       showToast(
-        isEdit
-          ? `✏️ บันทึกลง Firebase Firestore & ส่งแจ้งเตือน LINE เรียบร้อย`
-          : `🆕 บันทึกงานใหม่ลง Firebase & ส่ง LINE เรียบร้อย!`,
-        'success'
+        result.message ||
+          (isEdit
+            ? `✏️ บันทึกลง Firebase Firestore & ส่งแจ้งเตือน LINE เรียบร้อย`
+            : `🆕 บันทึกงานใหม่ลง Firebase & ส่ง LINE เรียบร้อย!`),
+        result.success ? 'success' : 'info'
       );
     } catch (err) {
       console.warn('LINE notify failed:', err);
@@ -265,8 +268,6 @@ export default function App() {
       setViewingJob((prev) => (prev ? { ...prev, status: newStatus, updatedAt: new Date().toISOString() } : null));
     }
 
-    showToast('⚡ อัพเดทสถานะลง Firebase และส่ง LINE แจ้งเตือนแล้ว', 'success');
-
     if (updatedTarget) {
       const tgt = updatedTarget as JobItem;
       // 📜 Audit Log
@@ -293,15 +294,21 @@ export default function App() {
       // 2. ส่งแจ้งเตือน LINE
       try {
         const targetId = settings.lineTargetGroupId || settings.lineTargetUserId || INITIAL_SETTINGS.lineTargetGroupId;
-        await sendLineFlexDirect(tgt, {
+        const lineRes = await sendLineFlexDirect(tgt, {
           targetId,
           channelAccessToken: settings.lineChannelAccessToken || INITIAL_SETTINGS.lineChannelAccessToken,
           companyName: settings.companyName || INITIAL_SETTINGS.companyName,
+          relayUrl: settings.lineRelayUrl,
           eventLabel: '🔄 อัพเดทสถานะงาน',
         });
         setLastSyncedAt(new Date());
+        showToast(
+          lineRes.message || '⚡ อัพเดทสถานะลง Firebase และส่ง LINE แจ้งเตือนแล้ว',
+          lineRes.success ? 'success' : 'info'
+        );
       } catch (err) {
         console.warn('Quick status LINE send failed:', err);
+        showToast('⚡ อัพเดทสถานะลง Firebase เรียบร้อยแล้ว', 'success');
       }
     }
   };

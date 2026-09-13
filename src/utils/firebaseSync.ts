@@ -161,3 +161,58 @@ export const syncAllJobsToFirebase = async (jobs: JobItem[]): Promise<number> =>
   return successCount;
 };
 
+/**
+ * Log and queue a LINE notification event in Firestore "line_notifications" collection
+ * Enables Firebase Cloud Functions / serverless workers to push to LINE automatically!
+ */
+export const saveNotificationToFirebase = async (notification: {
+  jobId: string;
+  jobCode: string;
+  jobTitle: string;
+  eventLabel: string;
+  targetId: string;
+  companyName: string;
+  status: 'pending' | 'sent' | 'failed';
+  error?: string;
+  payload?: any;
+}): Promise<string | null> => {
+  const db = getFirestoreDb();
+  if (!db) return null;
+
+  try {
+    const notifId = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const docRef = doc(db, 'line_notifications', notifId);
+    await setDoc(docRef, {
+      ...notification,
+      id: notifId,
+      createdAt: new Date().toISOString(),
+      source: typeof window !== 'undefined' ? window.location.hostname : 'app',
+    });
+    return notifId;
+  } catch (err) {
+    console.warn('Failed to log notification in Firebase:', err);
+    return null;
+  }
+};
+
+/**
+ * Check Firebase Firestore connectivity
+ */
+export const testFirebaseConnection = async (): Promise<{ success: boolean; message: string }> => {
+  const db = getFirestoreDb();
+  if (!db) {
+    return { success: false, message: 'ไม่สามารถเริ่มต้น Firebase SDK ได้ กรุณาตรวจสอบการตั้งค่า' };
+  }
+  try {
+    const snapshot = await getDocs(collection(db, 'jobs'));
+    return {
+      success: true,
+      message: `เชื่อมต่อ Firebase Firestore สำเร็จ! พบข้อมูลงาน ${snapshot.size} รายการในฐานข้อมูล`,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `ไม่สามารถเข้าถึง Firebase Firestore: ${err.message || err}`,
+    };
+  }
+};

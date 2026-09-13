@@ -162,7 +162,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     onChange(updatedList);
     stopCamera();
 
-    // Background upload to public CDN for instant LINE & Sheets compatibility
+    // Background upload to public CDN for instant LINE & Firebase compatibility
     uploadDirectToPublicCdn(compressedUrl).then((cdnUrl) => {
       if (cdnUrl && cdnUrl !== compressedUrl) {
         onChange(updatedList.map((p) => (p.id === newPhotoId ? { ...p, url: cdnUrl } : p)));

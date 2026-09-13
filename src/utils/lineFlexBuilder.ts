@@ -7,7 +7,11 @@ import {
   getStatusConfig,
 } from './formatters';
 
-export const buildLineFlexMessage = (job: JobItem, companyName = 'JobTracker Pro') => {
+export const buildLineFlexMessage = (
+  job: JobItem,
+  companyName = 'JobTracker Pro',
+  headerLabel = '🔔 อัพเดทสถานะงานหน้างาน'
+) => {
   const statusCfg = getStatusConfig(job.status);
   const paymentCfg = getPaymentTypeConfig(job.paymentType);
   const fin = calculateJobFinancials(job);
@@ -33,7 +37,7 @@ export const buildLineFlexMessage = (job: JobItem, companyName = 'JobTracker Pro
           contents: [
             {
               type: 'text',
-              text: '🔔 อัพเดทสถานะงานหน้างาน',
+              text: headerLabel,
               weight: 'bold',
               color: '#FFFFFF',
               size: 'sm',
