@@ -54,11 +54,6 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
 
       if (editingJob) {
         setFormData(editingJob);
-        if (editingJob.productBrand && !POPULAR_BRANDS.includes(editingJob.productBrand)) {
-          setCustomBrand(editingJob.productBrand);
-        } else {
-          setCustomBrand('');
-        }
       } else {
         setFormData({
           jobCode: `JOB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -74,14 +69,13 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
             lng: 100.5018,
           },
           photos: [],
-          productBrand: 'SCG / COTTO',
+          productBrand: '',
           productDetails: '',
           price: 0,
           paymentType: 'cash',
           notes: '',
           assignedTo: '',
         });
-        setCustomBrand('');
       }
       setErrors({});
     }
@@ -89,22 +83,21 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Status options
+  // 4 Core Status options as requested
   const statusList: Array<{ value: JobStatus; label: string }> = [
     { value: 'pending', label: 'รอดำเนินการ' },
-    { value: 'in_progress', label: 'กำลังดำเนินการ' },
-    { value: 'review', label: 'รอตรวจงาน' },
-    { value: 'completed', label: 'เสร็จสมบูรณ์' },
-    { value: 'issue', label: 'มีปัญหา / ต้องแก้ไข' },
+    { value: 'quotation', label: 'เสนอราคา' },
+    { value: 'follow_up', label: 'ติดตามซ้ำ' },
+    { value: 'closed_deal', label: 'ปิดการขาย' },
   ];
 
-  // Payment options
+  // 5 Payment / Credit term options as requested
   const paymentList: Array<{ value: PaymentType; label: string; desc: string }> = [
-    { value: 'cash', label: '💵 เงินสด', desc: 'ชำระทันทีหน้างาน' },
-    { value: 'transfer', label: '📱 เงินโอน', desc: 'โอนผ่านบัญชีธนาคาร' },
-    { value: 'credit_30', label: '📅 เครดิต 30 วัน', desc: 'วางบิลเครดิตเทอม 30 วัน' },
-    { value: 'credit_60', label: '🗓️ เครดิต 60 วัน', desc: 'วางบิลเครดิตเทอม 60 วัน' },
-    { value: 'credit_card', label: '💳 บัตรเครดิต', desc: 'รูดบัตรเครดิต' },
+    { value: 'cash', label: '💵 เงินสด', desc: 'ชำระทันที / หน้างาน' },
+    { value: 'credit_7', label: '📅 เครดิต 7 วัน', desc: 'เงื่อนไขเครดิตเทอม 7 วัน' },
+    { value: 'credit_15', label: '📅 เครดิต 15 วัน', desc: 'เงื่อนไขเครดิตเทอม 15 วัน' },
+    { value: 'credit_30', label: '🗓️ เครดิต 30 วัน', desc: 'วางบิลเครดิตเทอม 30 วัน' },
+    { value: 'credit_45', label: '🗓️ เครดิต 45 วัน', desc: 'วางบิลเครดิตเทอม 45 วัน' },
   ];
 
   const validate = () => {
@@ -113,7 +106,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
     if (!formData.contactPerson?.trim()) errs.contactPerson = 'กรุณาระบุชื่อผู้ติดต่อ';
     if (!formData.phoneNumber?.trim()) errs.phoneNumber = 'กรุณาระบุเบอร์ติดต่อ';
     if (!formData.date) errs.date = 'กรุณาเลือกวันที่';
-    if (!formData.productBrand?.trim()) errs.productBrand = 'กรุณาเลือกแบรนด์สินค้า';
+    if (!formData.productBrand?.trim()) errs.productBrand = 'กรุณาระบุแบรนด์สินค้า';
     if (formData.price === undefined || formData.price < 0) errs.price = 'กรุณาระบุราคาที่ถูกต้อง';
 
     setErrors(errs);
@@ -147,10 +140,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
       })
     );
 
-    const finalBrand =
-      formData.productBrand === 'อื่นๆ' && customBrand.trim()
-        ? customBrand.trim()
-        : formData.productBrand || 'ทั่วไป';
+    const finalBrand = formData.productBrand?.trim() || 'ทั่วไป';
 
     const completeJob: JobItem = {
       id: editingJob?.id || `job-${Date.now()}`,
@@ -206,6 +196,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
           >
@@ -232,7 +223,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
               </label>
               <input
                 type="text"
-                value={formData.title}
+                value={formData.title || ''}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 placeholder="เช่น ติดตั้งเครื่องปรับอากาศ บ้านเดี่ยวรามอินทรา, ปูกระเบื้องคอนโดลุมพินี"
                 className={`w-full text-sm px-3.5 py-2.5 bg-white border ${
@@ -245,9 +236,9 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
             {/* Status Selector */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                อัพเดทสถานะของงาน <span className="text-rose-500">*</span>
+                สถานะของงาน <span className="text-rose-500">*</span>
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {statusList.map((st) => {
                   const cfg = getStatusConfig(st.value);
                   const isSelected = formData.status === st.value;
@@ -256,13 +247,13 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                       key={st.value}
                       type="button"
                       onClick={() => setFormData({ ...formData, status: st.value })}
-                      className={`px-3 py-2 rounded-xl text-xs font-medium border text-center transition-all flex items-center justify-center gap-1.5 ${
+                      className={`px-3 py-2.5 rounded-xl text-xs font-medium border text-center transition-all flex items-center justify-center gap-2 ${
                         isSelected
                           ? `${cfg.bgClass} ring-2 ring-offset-1 font-bold shadow-xs scale-102`
                           : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
-                      <span className={`w-2 h-2 rounded-full ${cfg.badgeBg}`} />
+                      <span className={`w-2.5 h-2.5 rounded-full ${cfg.badgeBg}`} />
                       <span>{st.label}</span>
                     </button>
                   );
@@ -280,7 +271,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                   <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="text"
-                    value={formData.contactPerson}
+                    value={formData.contactPerson || ''}
                     onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
                     placeholder="เช่น คุณสมชาย (โฟร์แมน)"
                     className={`w-full text-sm pl-9 pr-3 py-2 bg-white border ${
@@ -299,7 +290,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                   <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="tel"
-                    value={formData.phoneNumber}
+                    value={formData.phoneNumber || ''}
                     onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
                     placeholder="เช่น 081-234-5678"
                     className={`w-full text-sm pl-9 pr-3 py-2 bg-white border ${
@@ -321,7 +312,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                   <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="date"
-                    value={formData.date}
+                    value={formData.date || ''}
                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                     className="w-full text-sm pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none"
                   />
@@ -334,7 +325,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                   <Clock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="time"
-                    value={formData.time}
+                    value={formData.time || ''}
                     onChange={(e) => setFormData({ ...formData, time: e.target.value })}
                     className="w-full text-sm pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none"
                   />
@@ -345,7 +336,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                 <label className="block text-xs font-semibold text-slate-700 mb-1">ช่าง / ผู้รับผิดชอบ</label>
                 <input
                   type="text"
-                  value={formData.assignedTo}
+                  value={formData.assignedTo || ''}
                   onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
                   placeholder="เช่น ช่างเอกชัย (ทีม A)"
                   className="w-full text-sm px-3 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none"
@@ -371,7 +362,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
               </label>
               <input
                 type="text"
-                value={formData.location?.address}
+                value={formData.location?.address || ''}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
@@ -433,40 +424,36 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
               <span className="text-[11px] text-rose-500 font-medium">* สินค้า / ราคา / สดหรือเครดิต</span>
             </div>
 
-            {/* Brand Selection */}
+            {/* Brand Direct Text Input */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                 สินค้าที่ใช้ แบรนด์ไหน <span className="text-rose-500">*</span>
               </label>
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {POPULAR_BRANDS.map((brand) => {
-                  const isSelected = formData.productBrand === brand;
-                  return (
-                    <button
-                      key={brand}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, productBrand: brand })}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                        isSelected
-                          ? 'bg-sky-600 text-white border-sky-600 shadow-xs font-bold'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {brand}
-                    </button>
-                  );
-                })}
-              </div>
+              <input
+                type="text"
+                value={formData.productBrand || ''}
+                onChange={(e) => setFormData({ ...formData, productBrand: e.target.value })}
+                placeholder="กรอกชื่อแบรนด์สินค้า เช่น Daikin, SCG, TOA, Mitsubishi, Schneider, TOSTEM, Hafele..."
+                className={`w-full text-sm px-3.5 py-2.5 bg-white border ${
+                  errors.productBrand ? 'border-rose-400 ring-1 ring-rose-300' : 'border-slate-300'
+                } rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none`}
+              />
+              {errors.productBrand && <p className="text-xs text-rose-600 mt-1">{errors.productBrand}</p>}
 
-              {formData.productBrand === 'อื่นๆ' && (
-                <input
-                  type="text"
-                  value={customBrand}
-                  onChange={(e) => setCustomBrand(e.target.value)}
-                  placeholder="พิมพ์ระบุชื่อแบรนด์อื่นๆ..."
-                  className="w-full text-sm px-3.5 py-2 bg-white border border-sky-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                />
-              )}
+              {/* Quick suggestion chips */}
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <span className="text-[11px] text-slate-400">แนะนำ:</span>
+                {['Daikin', 'SCG / COTTO', 'TOA', 'Mitsubishi Electric', 'Schneider Electric', 'Carrier', 'Hafele', 'Panasonic'].map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, productBrand: b })}
+                    className="text-[11px] px-2 py-0.5 bg-white hover:bg-sky-50 hover:text-sky-700 hover:border-sky-300 border border-slate-200 text-slate-600 rounded-md transition-colors"
+                  >
+                    + {b}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Product Details */}
@@ -476,7 +463,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
               </label>
               <input
                 type="text"
-                value={formData.productDetails}
+                value={formData.productDetails || ''}
                 onChange={(e) => setFormData({ ...formData, productDetails: e.target.value })}
                 placeholder="เช่น Daikin Inverter 18000 BTU, กระเบื้อง COTTO 60x60 cm. 20 กล่อง"
                 className="w-full text-sm px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none"
@@ -495,7 +482,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                     type="number"
                     min="0"
                     step="100"
-                    value={formData.price || ''}
+                    value={formData.price ?? ''}
                     onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
                     placeholder="0.00"
                     className={`w-full text-base font-bold pl-8 pr-3 py-2 bg-white border ${
@@ -563,7 +550,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
               </label>
               <textarea
                 rows={2}
-                value={formData.notes}
+                value={formData.notes || ''}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 placeholder="เช่น เงื่อนไขการรับประกัน 1 ปี, นัดตรวจรับงานซ่อมเพิ่มเติม, เลขที่ใบเสร็จ"
                 className="w-full text-sm px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none"

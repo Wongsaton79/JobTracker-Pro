@@ -218,15 +218,19 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   };
 
   // Search Address/Location
-  const handleSearchLocation = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearchLocation = async (e?: React.FormEvent | React.MouseEvent | React.KeyboardEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!searchQuery.trim()) return;
 
     setIsSearching(true);
+    setGpsError(null);
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          searchQuery + ' Thailand'
+          searchQuery.trim() + ' Thailand'
         )}&limit=1&accept-language=th`,
         { headers: { 'User-Agent': 'JobTrackerPro/1.0' } }
       );
@@ -245,10 +249,11 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           onLocationChange(foundLat, foundLng, data[0].display_name);
         }
       } else {
-        alert('ไม่พบสถานที่ที่ค้นหา กรุณาระบุชื่อสถานที่ให้ชัดเจนขึ้น หรือเลื่อนหมุดบนแผนที่');
+        setGpsError(`ไม่พบสถานที่ "${searchQuery}" กรุณาลองระบุชื่อสถานที่/ถนนให้ชัดเจนขึ้น หรือเลื่อนหมุดบนแผนที่`);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Search error:', err);
+      setGpsError('เกิดข้อผิดพลาดในการเชื่อมต่อค้นหาสถานที่ กรุณาลองใหม่อีกครั้ง');
     } finally {
       setIsSearching(false);
     }
@@ -260,24 +265,35 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     <div className="relative w-full flex flex-col gap-2">
       {isEditable && (
         <div className="flex flex-col sm:flex-row gap-2">
-          {/* Search bar */}
-          <form onSubmit={handleSearchLocation} className="flex-1 relative flex items-center">
+          {/* Search bar (using div and onKeyDown to prevent nested form submissions) */}
+          <div className="flex-1 relative flex items-center">
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ค้นหาชื่อสถานที่ / ถนน / เขต ในไทย..."
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                if (gpsError) setGpsError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleSearchLocation(e);
+                }
+              }}
+              placeholder="ค้นหาชื่อสถานที่ / ถนน / เขต / ซอย..."
               className="w-full text-xs sm:text-sm pl-8 pr-16 py-2 border border-slate-300 rounded-lg bg-white shadow-xs focus:ring-2 focus:ring-sky-500 focus:outline-none"
             />
             <Search className="w-4 h-4 text-slate-400 absolute left-2.5 pointer-events-none" />
             <button
-              type="submit"
+              type="button"
+              onClick={(e) => handleSearchLocation(e)}
               disabled={isSearching}
-              className="absolute right-1 px-2.5 py-1 text-xs bg-slate-800 text-white rounded-md hover:bg-slate-700 disabled:opacity-50 transition-colors font-medium"
+              className="absolute right-1 px-2.5 py-1 text-xs bg-slate-800 text-white rounded-md hover:bg-slate-700 disabled:opacity-50 transition-colors font-medium flex items-center gap-1"
             >
               {isSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'ค้นหา'}
             </button>
-          </form>
+          </div>
 
           {/* GPS Button */}
           <button
@@ -289,7 +305,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
             {isGettingGps ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>กำลังจับสัญญาณ GPS...</span>
+                <span>กำลังจับพิกัด GPS...</span>
               </>
             ) : (
               <>

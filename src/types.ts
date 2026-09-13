@@ -1,6 +1,22 @@
-export type JobStatus = 'pending' | 'in_progress' | 'review' | 'completed' | 'issue';
+export type JobStatus =
+  | 'pending'
+  | 'quotation'
+  | 'follow_up'
+  | 'closed_deal'
+  | 'completed'
+  | 'in_progress'
+  | 'review'
+  | 'issue';
 
-export type PaymentType = 'cash' | 'transfer' | 'credit_30' | 'credit_60' | 'credit_card';
+export type PaymentType =
+  | 'cash'
+  | 'credit_7'
+  | 'credit_15'
+  | 'credit_30'
+  | 'credit_45'
+  | 'transfer'
+  | 'credit_60'
+  | 'credit_card';
 
 export interface JobPhoto {
   id: string;

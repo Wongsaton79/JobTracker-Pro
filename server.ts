@@ -228,21 +228,38 @@ async function processJobPhotosAsync(job: any, publicOrigin?: string) {
 }
 
 // Helper function to build LINE Flex Bubble JSON
-function buildLineFlexPayload(job: any, companyName: string, eventLabel: string, includeHero = true) {
+function buildLineFlexPayload(job: any, companyName: string, eventLabel: string) {
   const statusColors: Record<string, string> = {
+    pending: '#64748B',
+    quotation: '#D97706',
+    follow_up: '#2563EB',
+    closed_deal: '#059669',
     completed: '#059669',
     in_progress: '#0284C7',
-    review: '#D97706',
-    pending: '#475569',
+    review: '#9333EA',
     issue: '#E11D48',
   };
 
   const statusLabels: Record<string, string> = {
-    completed: 'เสร็จสมบูรณ์ 100%',
-    in_progress: 'กำลังดำเนินการ',
-    review: 'รอตรวจรับมอบงาน',
     pending: 'รอดำเนินการ',
-    issue: 'มีปัญหา/ต้องแก้ไข',
+    quotation: 'เสนอราคา',
+    follow_up: 'ติดตามซ้ำ',
+    closed_deal: 'ปิดการขาย',
+    completed: 'ปิดการขาย',
+    in_progress: 'กำลังดำเนินการ',
+    review: 'รอตรวจงาน',
+    issue: 'มีปัญหา / ต้องแก้ไข',
+  };
+
+  const paymentLabels: Record<string, string> = {
+    cash: 'เงินสด',
+    credit_7: 'เครดิต 7 วัน',
+    credit_15: 'เครดิต 15 วัน',
+    credit_30: 'เครดิต 30 วัน',
+    credit_45: 'เครดิต 45 วัน',
+    transfer: 'เงินโอน',
+    credit_60: 'เครดิต 60 วัน',
+    credit_card: 'บัตรเครดิต',
   };
 
   const status = (job.status || 'pending').toLowerCase();
@@ -250,21 +267,13 @@ function buildLineFlexPayload(job: any, companyName: string, eventLabel: string,
   const statusBadge = statusLabels[status] || 'อัพเดทงาน';
   const topHeader = eventLabel || '🔔 อัพเดทสถานะงานหน้างาน';
 
-  let heroImage = '';
-  if (includeHero && job.photos && Array.isArray(job.photos) && job.photos.length > 0) {
-    const firstP = job.photos[0];
-    const rawUrl = typeof firstP === 'string' ? firstP : firstP?.url;
-    if (rawUrl && typeof rawUrl === 'string') {
-      if (rawUrl.startsWith('https://') || rawUrl.startsWith('http://')) {
-        heroImage = rawUrl.replace(/^http:\/\//, 'https://');
-      }
-    }
-  }
-
-  const mapUrl = job.location
+  const mapUrl = job.location && job.location.lat
     ? `https://www.google.com/maps?q=${job.location.lat},${job.location.lng}`
     : 'https://maps.google.com';
   const phoneUri = `tel:${String(job.phoneNumber || '').replace(/[^0-9]/g, '')}`;
+  const webAppUrl = job.webUrl || mapUrl;
+
+  const paymentLabel = paymentLabels[job.paymentType] || job.paymentType || 'เงินสด';
 
   const bubble: any = {
     type: 'bubble',
@@ -346,7 +355,7 @@ function buildLineFlexPayload(job: any, companyName: string, eventLabel: string,
             { type: 'text', text: '💰 ยอดเงิน & ชำระ', size: 'xs', color: '#64748B', flex: 3 },
             {
               type: 'text',
-              text: `฿${Number(job.price || 0).toLocaleString()} (${job.paymentType || 'เงินสด'})`,
+              text: `฿${Number(job.price || 0).toLocaleString()} (${paymentLabel})`,
               size: 'xs',
               color: '#059669',
               weight: 'bold',
@@ -369,6 +378,26 @@ function buildLineFlexPayload(job: any, companyName: string, eventLabel: string,
             },
           ],
         },
+        ...(job.notes
+          ? [
+              {
+                type: 'box' as const,
+                layout: 'vertical' as const,
+                backgroundColor: '#F8FAFC',
+                paddingAll: '8px',
+                cornerRadius: '6px',
+                contents: [
+                  {
+                    type: 'text' as const,
+                    text: `📝 หมายเหตุ: ${job.notes}`,
+                    size: 'xxs' as const,
+                    color: '#475569',
+                    wrap: true,
+                  },
+                ],
+              },
+            ]
+          : []),
       ],
     },
     footer: {
@@ -377,6 +406,18 @@ function buildLineFlexPayload(job: any, companyName: string, eventLabel: string,
       spacing: 'sm',
       paddingAll: '14px',
       contents: [
+        // Primary Web View Button
+        {
+          type: 'button',
+          style: 'primary',
+          color: '#059669',
+          height: 'sm',
+          action: {
+            type: 'uri',
+            label: '🌐 คลิกดูรูปและข้อมูลที่หน้าเว็บ',
+            uri: webAppUrl,
+          },
+        },
         {
           type: 'box',
           layout: 'horizontal',
@@ -384,8 +425,7 @@ function buildLineFlexPayload(job: any, companyName: string, eventLabel: string,
           contents: [
             {
               type: 'button',
-              style: 'primary',
-              color: '#0284C7',
+              style: 'secondary',
               height: 'sm',
               action: { type: 'uri', label: '🗺️ แผนที่ GPS', uri: mapUrl },
             },
@@ -409,18 +449,6 @@ function buildLineFlexPayload(job: any, companyName: string, eventLabel: string,
     },
   };
 
-  // Attach hero image if available and valid HTTPS
-  if (heroImage && heroImage.startsWith('https://')) {
-    bubble.hero = {
-      type: 'image',
-      url: heroImage,
-      size: 'full',
-      aspectRatio: '20:13',
-      aspectMode: 'cover',
-      action: { type: 'uri', label: 'ดูรูปภาพ', uri: heroImage },
-    };
-  }
-
   return bubble;
 }
 
@@ -430,8 +458,8 @@ async function directPushLineMessage(targetId: string, token: string, job: any, 
   const lineTarget = targetId || DEFAULT_LINE_GROUP;
 
   try {
-    // Attempt 1: Full Flex Bubble (with actual job photo if available)
-    const flexBubble = buildLineFlexPayload(job, companyName, eventLabel, true);
+    // Flex Bubble without heavy image requirement (ensures highest reliability & includes Web link)
+    const flexBubble = buildLineFlexPayload(job, companyName, eventLabel);
     const linePayload = {
       to: lineTarget,
       messages: [
@@ -458,38 +486,21 @@ async function directPushLineMessage(targetId: string, token: string, job: any, 
       return { success: true, status: response.status };
     }
 
-    console.warn('⚠️ LINE Push with hero image failed (HTTP', response.status, '):', responseText);
+    console.warn('⚠️ LINE Push Flex failed (HTTP', response.status, '):', responseText);
 
-    // Attempt 2: If failed (e.g. 400 Bad Request on photo URL), retry without hero image
-    const retryBubble = buildLineFlexPayload(job, companyName, eventLabel, false);
-    const retryPayload = {
-      to: lineTarget,
-      messages: [
-        {
-          type: 'flex',
-          altText: `[${eventLabel}] ${job.title || 'งานหน้างาน'} (${job.jobCode || ''})`,
-          contents: retryBubble,
-        },
-      ],
+    // Attempt 2: Text fallback to guarantee message arrival
+    const statusLabels: Record<string, string> = {
+      pending: 'รอดำเนินการ',
+      quotation: 'เสนอราคา',
+      follow_up: 'ติดตามซ้ำ',
+      closed_deal: 'ปิดการขาย',
+      completed: 'ปิดการขาย',
+      in_progress: 'กำลังดำเนินการ',
+      review: 'รอตรวจงาน',
+      issue: 'มีปัญหา / ต้องแก้ไข',
     };
-
-    const retryRes = await fetch('https://api.line.me/v2/bot/message/push', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${lineToken}`,
-      },
-      body: JSON.stringify(retryPayload),
-    });
-
-    const retryText = await retryRes.text();
-    if (retryRes.ok) {
-      console.log('✅ LINE Push Fallback Flex Succeeded');
-      return { success: true, status: retryRes.status, fallbackUsed: true };
-    }
-
-    // Attempt 3: Final text fallback to guarantee message arrival
-    const textMsg = `🔔 ${eventLabel}\n📌 งาน: ${job.title || 'งานหน้างาน'} (${job.jobCode || '-'})\n📊 สถานะ: ${job.status || 'รอดำเนินการ'}\n👤 ผู้ติดต่อ: ${job.contactPerson || '-'} (${job.phoneNumber || '-'})\n💰 ยอด: ฿${Number(job.price || 0).toLocaleString()}\n📍 สถานที่: ${(job.location && job.location.address) || '-'}`;
+    const statusText = statusLabels[job.status] || job.status || 'รอดำเนินการ';
+    const textMsg = `🔔 ${eventLabel}\n📌 งาน: ${job.title || 'งานหน้างาน'} (${job.jobCode || '-'})\n📊 สถานะ: ${statusText}\n👤 ผู้ติดต่อ: ${job.contactPerson || '-'} (${job.phoneNumber || '-'})\n🏷️ แบรนด์: ${job.productBrand || '-'}\n💰 ยอด: ฿${Number(job.price || 0).toLocaleString()} (${job.paymentType || 'เงินสด'})\n📍 สถานที่: ${(job.location && job.location.address) || '-'}`;
     
     const textRes = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',

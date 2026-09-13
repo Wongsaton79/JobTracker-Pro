@@ -121,6 +121,20 @@ export default function App() {
     };
   }, []);
 
+  // 🔗 Auto-open Job Detail if jobId is in URL query parameters (e.g. from LINE button click)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlJobId = urlParams.get('jobId') || urlParams.get('job');
+      if (urlJobId && jobs.length > 0) {
+        const found = jobs.find((j) => j.id === urlJobId || j.jobCode === urlJobId);
+        if (found) {
+          setViewingJob(found);
+        }
+      }
+    }
+  }, [jobs]);
+
   // 🔄 Manual / Quick Fetch from Firebase
   const handleQuickFetchFromFirebase = async () => {
     setIsQuickSyncing(true);

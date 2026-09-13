@@ -5,17 +5,11 @@ export const buildLineFlexMessage = (job: JobItem, companyName = 'JobTracker Pro
   const statusCfg = getStatusConfig(job.status);
   const paymentCfg = getPaymentTypeConfig(job.paymentType);
   
-  let heroImage = '';
-  if (job.photos && Array.isArray(job.photos) && job.photos.length > 0) {
-    const firstP = job.photos[0];
-    const rawUrl = typeof firstP === 'string' ? firstP : firstP?.url;
-    if (rawUrl && typeof rawUrl === 'string' && (rawUrl.startsWith('https://') || rawUrl.startsWith('http://'))) {
-      heroImage = rawUrl.replace(/^http:\/\//, 'https://');
-    }
-  }
-
   const mapUrl = `https://www.google.com/maps?q=${job.location.lat},${job.location.lng}`;
   const phoneUri = `tel:${job.phoneNumber.replace(/[^0-9]/g, '')}`;
+  
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const webAppUrl = origin ? `${origin}/?jobId=${encodeURIComponent(job.id || job.jobCode)}` : mapUrl;
 
   const flexJson: any = {
     type: 'bubble',
@@ -203,6 +197,19 @@ export const buildLineFlexMessage = (job: JobItem, companyName = 'JobTracker Pro
       spacing: 'sm',
       paddingAll: '14px',
       contents: [
+        // Main Action Button: Click to view details & photos on Web App
+        {
+          type: 'button',
+          style: 'primary',
+          color: '#059669',
+          height: 'sm',
+          action: {
+            type: 'uri',
+            label: '🌐 คลิกดูรูปและข้อมูลที่หน้าเว็บ',
+            uri: webAppUrl,
+          },
+        },
+        // Secondary row: Maps and Phone
         {
           type: 'box',
           layout: 'horizontal',
@@ -210,8 +217,7 @@ export const buildLineFlexMessage = (job: JobItem, companyName = 'JobTracker Pro
           contents: [
             {
               type: 'button',
-              style: 'primary',
-              color: '#0284C7',
+              style: 'secondary',
               height: 'sm',
               action: {
                 type: 'uri',
@@ -243,26 +249,7 @@ export const buildLineFlexMessage = (job: JobItem, companyName = 'JobTracker Pro
     },
   };
 
-  if (heroImage && heroImage.startsWith('https://')) {
-    flexJson.hero = {
-      type: 'image',
-      url: heroImage,
-      size: 'full',
-      aspectRatio: '20:13',
-      aspectMode: 'cover',
-      action: {
-        type: 'uri',
-        label: 'ดูรูปภาพหน้างาน',
-        uri: heroImage,
-      },
-    };
-  }
-
-  return {
-    type: 'flex',
-    altText: `[${statusCfg.label}] ${job.title} (${formatCurrency(job.price)})`,
-    contents: flexJson,
-  };
+  return flexJson;
 };
 
 export const generateLineNotifyText = (job: JobItem): string => {

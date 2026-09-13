@@ -211,11 +211,10 @@ export const JobListView: React.FC<JobListViewProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
           {[
             { key: 'all', label: 'ทั้งหมด' },
-            { key: 'in_progress', label: 'กำลังทำ' },
             { key: 'pending', label: 'รอดำเนินการ' },
-            { key: 'review', label: 'รอตรวจงาน' },
-            { key: 'completed', label: 'เสร็จสิ้น' },
-            { key: 'issue', label: 'มีปัญหา' },
+            { key: 'quotation', label: 'เสนอราคา' },
+            { key: 'follow_up', label: 'ติดตามซ้ำ' },
+            { key: 'closed_deal', label: 'ปิดการขาย' },
           ].map((tab) => {
             const isSelected = selectedStatus === tab.key;
             const count = statusCounts[tab.key] || 0;
@@ -270,10 +269,10 @@ export const JobListView: React.FC<JobListViewProps> = ({
               >
                 <option value="all">ทุกประเภท</option>
                 <option value="cash">เงินสด</option>
-                <option value="transfer">เงินโอน</option>
+                <option value="credit_7">เครดิต 7 วัน</option>
+                <option value="credit_15">เครดิต 15 วัน</option>
                 <option value="credit_30">เครดิต 30 วัน</option>
-                <option value="credit_60">เครดิต 60 วัน</option>
-                <option value="credit_card">บัตรเครดิต</option>
+                <option value="credit_45">เครดิต 45 วัน</option>
               </select>
             </div>
 

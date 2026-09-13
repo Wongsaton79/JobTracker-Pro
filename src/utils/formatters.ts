@@ -36,32 +36,51 @@ export const formatThaiDate = (dateStr: string, format: 'short' | 'full' = 'full
 
 export const getStatusConfig = (status: JobStatus) => {
   switch (status) {
+    case 'quotation':
+      return {
+        label: 'เสนอราคา',
+        shortLabel: 'เสนอราคา',
+        color: 'amber',
+        bgClass: 'bg-amber-50 text-amber-800 border-amber-300',
+        badgeBg: 'bg-amber-500',
+        lineColor: '#D97706',
+      };
+    case 'follow_up':
+      return {
+        label: 'ติดตามซ้ำ',
+        shortLabel: 'ติดตามซ้ำ',
+        color: 'blue',
+        bgClass: 'bg-blue-50 text-blue-800 border-blue-300',
+        badgeBg: 'bg-blue-500',
+        lineColor: '#2563EB',
+      };
+    case 'closed_deal':
     case 'completed':
       return {
-        label: 'เสร็จสมบูรณ์',
-        shortLabel: 'เสร็จสิ้น',
+        label: 'ปิดการขาย',
+        shortLabel: 'ปิดการขาย',
         color: 'emerald',
-        bgClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        badgeBg: 'bg-emerald-500',
-        lineColor: '#10B981',
+        bgClass: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+        badgeBg: 'bg-emerald-600',
+        lineColor: '#059669',
       };
     case 'in_progress':
       return {
         label: 'กำลังดำเนินการ',
         shortLabel: 'กำลังทำ',
-        color: 'blue',
-        bgClass: 'bg-blue-50 text-blue-700 border-blue-200',
-        badgeBg: 'bg-blue-500',
-        lineColor: '#3B82F6',
+        color: 'sky',
+        bgClass: 'bg-sky-50 text-sky-700 border-sky-200',
+        badgeBg: 'bg-sky-500',
+        lineColor: '#0284C7',
       };
     case 'review':
       return {
         label: 'รอตรวจสอบงาน',
         shortLabel: 'รอตรวจ',
-        color: 'amber',
-        bgClass: 'bg-amber-50 text-amber-700 border-amber-200',
-        badgeBg: 'bg-amber-500',
-        lineColor: '#F59E0B',
+        color: 'purple',
+        bgClass: 'bg-purple-50 text-purple-700 border-purple-200',
+        badgeBg: 'bg-purple-500',
+        lineColor: '#9333EA',
       };
     case 'issue':
       return {
@@ -78,8 +97,8 @@ export const getStatusConfig = (status: JobStatus) => {
         label: 'รอดำเนินการ',
         shortLabel: 'รอดำเนินการ',
         color: 'slate',
-        bgClass: 'bg-slate-100 text-slate-700 border-slate-200',
-        badgeBg: 'bg-slate-400',
+        bgClass: 'bg-slate-100 text-slate-700 border-slate-300',
+        badgeBg: 'bg-slate-500',
         lineColor: '#64748B',
       };
   }
@@ -89,31 +108,49 @@ export const getPaymentTypeConfig = (type: PaymentType) => {
   switch (type) {
     case 'cash':
       return {
-        label: 'เงินสด (Cash)',
-        badgeClass: 'bg-green-100 text-green-800 border-green-200',
+        label: 'เงินสด',
+        badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
         isCredit: false,
       };
-    case 'transfer':
+    case 'credit_7':
       return {
-        label: 'เงินโอน (Bank Transfer)',
-        badgeClass: 'bg-cyan-100 text-cyan-800 border-cyan-200',
-        isCredit: false,
+        label: 'เครดิต 7 วัน',
+        badgeClass: 'bg-sky-100 text-sky-800 border-sky-200',
+        isCredit: true,
+      };
+    case 'credit_15':
+      return {
+        label: 'เครดิต 15 วัน',
+        badgeClass: 'bg-blue-100 text-blue-800 border-blue-200',
+        isCredit: true,
       };
     case 'credit_30':
       return {
-        label: 'เครดิตเทอม 30 วัน',
+        label: 'เครดิต 30 วัน',
         badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-200',
         isCredit: true,
       };
+    case 'credit_45':
+      return {
+        label: 'เครดิต 45 วัน',
+        badgeClass: 'bg-purple-100 text-purple-800 border-purple-200',
+        isCredit: true,
+      };
+    case 'transfer':
+      return {
+        label: 'เงินโอน',
+        badgeClass: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+        isCredit: false,
+      };
     case 'credit_60':
       return {
-        label: 'เครดิตเทอม 60 วัน',
-        badgeClass: 'bg-purple-100 text-purple-800 border-purple-200',
+        label: 'เครดิต 60 วัน',
+        badgeClass: 'bg-violet-100 text-violet-800 border-violet-200',
         isCredit: true,
       };
     case 'credit_card':
       return {
-        label: 'บัตรเครดิต (Credit Card)',
+        label: 'บัตรเครดิต',
         badgeClass: 'bg-orange-100 text-orange-800 border-orange-200',
         isCredit: true,
       };

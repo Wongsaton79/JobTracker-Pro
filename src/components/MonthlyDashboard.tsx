@@ -65,17 +65,16 @@ export const MonthlyDashboard: React.FC<MonthlyDashboardProps> = ({ jobs }) => {
   // Key performance indicators
   const kpi = useMemo(() => {
     const totalJobs = monthlyJobs.length;
-    const completedJobs = monthlyJobs.filter((j) => j.status === 'completed').length;
-    const inProgressJobs = monthlyJobs.filter((j) => j.status === 'in_progress').length;
-    const reviewJobs = monthlyJobs.filter((j) => j.status === 'review').length;
-    const issueJobs = monthlyJobs.filter((j) => j.status === 'issue').length;
+    const closedDealJobs = monthlyJobs.filter((j) => j.status === 'closed_deal' || j.status === 'completed').length;
+    const quotationJobs = monthlyJobs.filter((j) => j.status === 'quotation').length;
+    const followUpJobs = monthlyJobs.filter((j) => j.status === 'follow_up').length;
     const pendingJobs = monthlyJobs.filter((j) => j.status === 'pending').length;
 
-    const completionRate = totalJobs > 0 ? Math.round((completedJobs / totalJobs) * 100) : 0;
+    const completionRate = totalJobs > 0 ? Math.round((closedDealJobs / totalJobs) * 100) : 0;
     const totalRevenue = monthlyJobs.reduce((sum, j) => sum + j.price, 0);
     const avgJobValue = totalJobs > 0 ? Math.round(totalRevenue / totalJobs) : 0;
 
-    const cashJobs = monthlyJobs.filter((j) => j.paymentType === 'cash' || j.paymentType === 'transfer');
+    const cashJobs = monthlyJobs.filter((j) => j.paymentType === 'cash');
     const creditJobs = monthlyJobs.filter((j) => j.paymentType.startsWith('credit'));
 
     const cashValue = cashJobs.reduce((sum, j) => sum + j.price, 0);
@@ -86,10 +85,9 @@ export const MonthlyDashboard: React.FC<MonthlyDashboardProps> = ({ jobs }) => {
 
     return {
       totalJobs,
-      completedJobs,
-      inProgressJobs,
-      reviewJobs,
-      issueJobs,
+      closedDealJobs,
+      quotationJobs,
+      followUpJobs,
       pendingJobs,
       completionRate,
       totalRevenue,
@@ -104,11 +102,11 @@ export const MonthlyDashboard: React.FC<MonthlyDashboardProps> = ({ jobs }) => {
   // Status Distribution Data for Pie Chart
   const statusChartData = useMemo(() => {
     const counts: Record<string, { name: string; value: number; color: string }> = {
-      completed: { name: 'เสร็จสมบูรณ์', value: 0, color: '#10B981' },
-      in_progress: { name: 'กำลังทำ', value: 0, color: '#3B82F6' },
-      review: { name: 'รอตรวจงาน', value: 0, color: '#F59E0B' },
-      issue: { name: 'มีปัญหา', value: 0, color: '#EF4444' },
-      pending: { name: 'รอดำเนินการ', value: 0, color: '#94A3B8' },
+      pending: { name: 'รอดำเนินการ', value: 0, color: '#64748B' },
+      quotation: { name: 'เสนอราคา', value: 0, color: '#D97706' },
+      follow_up: { name: 'ติดตามซ้ำ', value: 0, color: '#2563EB' },
+      closed_deal: { name: 'ปิดการขาย', value: 0, color: '#10B981' },
+      completed: { name: 'ปิดการขาย', value: 0, color: '#10B981' },
     };
 
     monthlyJobs.forEach((j) => {
@@ -124,10 +122,10 @@ export const MonthlyDashboard: React.FC<MonthlyDashboardProps> = ({ jobs }) => {
   const paymentChartData = useMemo(() => {
     const data: Record<string, { name: string; value: number; count: number; color: string }> = {
       cash: { name: 'เงินสด', value: 0, count: 0, color: '#10B981' },
-      transfer: { name: 'เงินโอน', value: 0, count: 0, color: '#06B6D4' },
+      credit_7: { name: 'เครดิต 7 วัน', value: 0, count: 0, color: '#38BDF8' },
+      credit_15: { name: 'เครดิต 15 วัน', value: 0, count: 0, color: '#3B82F6' },
       credit_30: { name: 'เครดิต 30 วัน', value: 0, count: 0, color: '#6366F1' },
-      credit_60: { name: 'เครดิต 60 วัน', value: 0, count: 0, color: '#A855F7' },
-      credit_card: { name: 'บัตรเครดิต', value: 0, count: 0, color: '#F97316' },
+      credit_45: { name: 'เครดิต 45 วัน', value: 0, count: 0, color: '#8B5CF6' },
     };
 
     monthlyJobs.forEach((j) => {
@@ -280,29 +278,34 @@ export const MonthlyDashboard: React.FC<MonthlyDashboardProps> = ({ jobs }) => {
           </div>
         </div>
 
-        {/* Card 3: In-Progress & Pending */}
+        {/* Card 3: Status Breakdown */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-            <span className="font-medium">งานกำลังทำ / รอตรวจ</span>
+            <span className="font-medium">สถานะงาน (ขั้นตอนขาย)</span>
             <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
               <Clock className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-2">
               <div>
-                <span className="text-lg sm:text-xl font-bold text-blue-600">{kpi.inProgressJobs}</span>
-                <span className="text-[10px] text-slate-400 block">กำลังทำ</span>
+                <span className="text-base sm:text-lg font-bold text-slate-600">{kpi.pendingJobs}</span>
+                <span className="text-[10px] text-slate-400 block">รอดำเนินการ</span>
               </div>
-              <div className="h-7 w-[1px] bg-slate-200" />
+              <div className="h-6 w-[1px] bg-slate-200" />
               <div>
-                <span className="text-lg sm:text-xl font-bold text-amber-600">{kpi.reviewJobs}</span>
-                <span className="text-[10px] text-slate-400 block">รอตรวจ</span>
+                <span className="text-base sm:text-lg font-bold text-amber-600">{kpi.quotationJobs}</span>
+                <span className="text-[10px] text-slate-400 block">เสนอราคา</span>
               </div>
-              <div className="h-7 w-[1px] bg-slate-200" />
+              <div className="h-6 w-[1px] bg-slate-200" />
               <div>
-                <span className="text-lg sm:text-xl font-bold text-rose-600">{kpi.issueJobs}</span>
-                <span className="text-[10px] text-slate-400 block">มีปัญหา</span>
+                <span className="text-base sm:text-lg font-bold text-blue-600">{kpi.followUpJobs}</span>
+                <span className="text-[10px] text-slate-400 block">ติดตามซ้ำ</span>
+              </div>
+              <div className="h-6 w-[1px] bg-slate-200" />
+              <div>
+                <span className="text-base sm:text-lg font-bold text-emerald-600">{kpi.closedDealJobs}</span>
+                <span className="text-[10px] text-slate-400 block">ปิดการขาย</span>
               </div>
             </div>
           </div>

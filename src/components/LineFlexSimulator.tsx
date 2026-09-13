@@ -225,20 +225,6 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
                   </p>
                 </div>
 
-                {/* Hero Photo Banner */}
-                {heroImage && (
-                  <div className="relative aspect-video w-full bg-slate-100 overflow-hidden">
-                    <img
-                      src={heroImage}
-                      alt={currentJob.title}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute bottom-1 right-2 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded">
-                      ภาพประกอบหน้างาน ({currentJob.photos.length} รูป)
-                    </div>
-                  </div>
-                )}
-
                 {/* Body Details Table */}
                 <div className="p-3.5 space-y-2 text-xs">
                   {/* Contact */}
@@ -300,14 +286,27 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
 
                 {/* Footer Buttons */}
                 <div className="p-3 bg-slate-50 border-t border-slate-100 space-y-1.5">
+                  {/* Web View Button */}
+                  <a
+                    href={`/?jobId=${encodeURIComponent(currentJob.id || currentJob.jobCode)}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.location.search = `?jobId=${encodeURIComponent(currentJob.id || currentJob.jobCode)}`;
+                    }}
+                    className="w-full py-1.5 bg-[#059669] text-white text-[11px] font-bold rounded-lg text-center shadow-xs flex items-center justify-center gap-1 hover:bg-[#047857]"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>🌐 คลิกดูรูปและข้อมูลที่หน้าเว็บ</span>
+                  </a>
+
                   <div className="grid grid-cols-2 gap-1.5">
                     <a
                       href={googleMapsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="py-1.5 bg-[#0284C7] text-white text-[11px] font-bold rounded-lg text-center shadow-xs flex items-center justify-center gap-1 hover:bg-[#0369A1]"
+                      className="py-1.5 bg-white border border-slate-300 text-slate-700 text-[11px] font-bold rounded-lg text-center shadow-xs flex items-center justify-center gap-1 hover:bg-slate-50"
                     >
-                      <MapPin className="w-3 h-3" />
+                      <MapPin className="w-3 h-3 text-sky-600" />
                       <span>แผนที่ GPS</span>
                     </a>
                     <a
