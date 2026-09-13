@@ -23,7 +23,7 @@ import { InteractiveMap } from './InteractiveMap';
 import { PhotoUploader, uploadDirectToPublicCdn } from './PhotoUploader';
 import { WorkRoundsEditor } from './WorkRoundsEditor';
 import { POPULAR_BRANDS } from '../data/initialData';
-import { getPaymentTypeConfig, getStatusConfig } from '../utils/formatters';
+import { calculateJobFinancials, getPaymentTypeConfig, getStatusConfig } from '../utils/formatters';
 import { addAuditLog } from '../utils/auditLogger';
 
 interface JobFormModalProps {
@@ -214,6 +214,13 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
       formData.assignedTo?.trim() ||
       (rounds.length > 0 ? rounds[rounds.length - 1].teamName : 'ทีมช่างปฏิบัติการ');
 
+    // Compute financial breakdown
+    const jobFinancials = calculateJobFinancials({
+      price: Number(formData.price) || 0,
+      paymentType: formData.paymentType as PaymentType,
+      workRounds: rounds,
+    });
+
     const completeJob: JobItem = {
       id: editingJob?.id || `job-${Date.now()}`,
       jobCode: formData.jobCode || `JOB-${Date.now()}`,
@@ -232,6 +239,9 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
       productBrand: finalBrand,
       productDetails: finalDetails,
       price: Number(formData.price) || 0,
+      totalPaidAmount: jobFinancials.totalPaid,
+      remainingAmount: jobFinancials.remaining,
+      overallPaymentStatus: jobFinancials.status,
       paymentType: formData.paymentType as PaymentType,
       notes: formData.notes?.trim() || '',
       assignedTo: currentAssigned,
@@ -583,7 +593,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                   <input
                     type="number"
                     min="0"
-                    step="100"
+                    step="any"
                     value={formData.price ?? ''}
                     onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
                     placeholder="0.00"
@@ -633,6 +643,57 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* สรุปสถานะการชำระเงินของงาน (คำนวณจากรอบการทำงาน) */}
+            {(() => {
+              const fin = calculateJobFinancials({
+                price: Number(formData.price) || 0,
+                paymentType: formData.paymentType as PaymentType,
+                workRounds: rounds,
+              });
+              return (
+                <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 mb-2.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                      <span>📊 สรุปยอดเงินและสถานะการชำระเงิน</span>
+                      {rounds.length > 0 && (
+                        <span className="text-[11px] text-slate-500 font-normal">
+                          (คำนวณจากการชำระแยกรายรอบ {rounds.length} รอบ)
+                        </span>
+                      )}
+                    </div>
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${fin.badgeClass}`}>
+                      {fin.statusLabel}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                      <div className="text-[10px] text-slate-500 font-medium">ยอดรวมทั้งสิ้น</div>
+                      <div className="text-sm font-bold text-slate-900 mt-0.5">฿{fin.totalPrice.toLocaleString()}</div>
+                    </div>
+                    <div className="bg-emerald-50/70 p-2 rounded-lg border border-emerald-100">
+                      <div className="text-[10px] text-emerald-700 font-medium">
+                        ชำระแล้ว ({fin.paidCount}/{rounds.length || 1} รอบ)
+                      </div>
+                      <div className="text-sm font-bold text-emerald-700 mt-0.5">฿{fin.totalPaid.toLocaleString()}</div>
+                    </div>
+                    <div
+                      className={`p-2 rounded-lg border ${
+                        fin.remaining > 0
+                          ? 'bg-amber-50/70 border-amber-200 text-amber-900'
+                          : 'bg-slate-50 border-slate-100 text-slate-600'
+                      }`}
+                    >
+                      <div className="text-[10px] font-medium">ยอดคงค้างชำระ</div>
+                      <div className={`text-sm font-bold mt-0.5 ${fin.remaining > 0 ? 'text-amber-700' : 'text-slate-600'}`}>
+                        ฿{fin.remaining.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Notes */}
             <div>

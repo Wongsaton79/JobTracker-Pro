@@ -1,9 +1,16 @@
 import { JobItem } from '../types';
-import { formatCurrency, formatThaiDate, getPaymentTypeConfig, getStatusConfig } from './formatters';
+import {
+  calculateJobFinancials,
+  formatCurrency,
+  formatThaiDate,
+  getPaymentTypeConfig,
+  getStatusConfig,
+} from './formatters';
 
 export const buildLineFlexMessage = (job: JobItem, companyName = 'JobTracker Pro') => {
   const statusCfg = getStatusConfig(job.status);
   const paymentCfg = getPaymentTypeConfig(job.paymentType);
+  const fin = calculateJobFinancials(job);
   
   const mapUrl = `https://www.google.com/maps?q=${job.location.lat},${job.location.lng}`;
   const phoneUri = `tel:${job.phoneNumber.replace(/[^0-9]/g, '')}`;
@@ -131,16 +138,17 @@ export const buildLineFlexMessage = (job: JobItem, companyName = 'JobTracker Pro
               contents: [
                 {
                   type: 'text',
-                  text: `${formatCurrency(job.price)}`,
+                  text: `${formatCurrency(fin.totalPrice)}`,
                   size: 'sm',
                   color: '#059669',
                   weight: 'bold',
                 },
                 {
                   type: 'text',
-                  text: paymentCfg.label,
+                  text: `${paymentCfg.label} • ${fin.statusLabel} (ชำระ ฿${fin.totalPaid.toLocaleString()}${fin.remaining > 0 ? ` / ค้าง ฿${fin.remaining.toLocaleString()}` : ''})`,
                   size: 'xxs',
-                  color: '#64748B',
+                  color: fin.remaining > 0 ? '#D97706' : '#059669',
+                  weight: 'bold',
                 },
               ],
             },
@@ -255,6 +263,7 @@ export const buildLineFlexMessage = (job: JobItem, companyName = 'JobTracker Pro
 export const generateLineNotifyText = (job: JobItem): string => {
   const statusCfg = getStatusConfig(job.status);
   const paymentCfg = getPaymentTypeConfig(job.paymentType);
+  const fin = calculateJobFinancials(job);
   const mapUrl = `https://www.google.com/maps?q=${job.location.lat},${job.location.lng}`;
 
   return `
@@ -265,7 +274,8 @@ export const generateLineNotifyText = (job: JobItem): string => {
 👤 ผู้ติดต่อ: ${job.contactPerson} (${job.phoneNumber})
 🏷️ แบรนด์สินค้า: ${job.productBrand}
 🛠️ รายการ: ${job.productDetails || '-'}
-💰 ราคา: ${formatCurrency(job.price)} (${paymentCfg.label})
+💰 ราคา: ${formatCurrency(fin.totalPrice)} (${paymentCfg.label})
+💳 การชำระเงิน: ${fin.statusLabel} (ชำระแล้ว ฿${fin.totalPaid.toLocaleString()}, ค้าง ฿${fin.remaining.toLocaleString()})
 📅 วันที่-เวลา: ${formatThaiDate(job.date, 'short')} ${job.time}
 📍 สถานที่: ${job.location.address || '-'}
 🗺️ พิกัดแผนที่: ${mapUrl}

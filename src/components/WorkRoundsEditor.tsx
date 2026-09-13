@@ -13,9 +13,14 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  CreditCard,
+  Wallet,
+  CheckCircle2,
+  AlertCircle,
+  Receipt,
 } from 'lucide-react';
-import { JobStatus, ProductItem, WorkRound } from '../types';
-import { formatCurrency, getStatusConfig } from '../utils/formatters';
+import { JobStatus, PaymentType, ProductItem, RoundPaymentStatus, WorkRound } from '../types';
+import { formatCurrency, getPaymentTypeConfig, getRoundPaymentConfig, getStatusConfig } from '../utils/formatters';
 import { POPULAR_BRANDS } from '../data/initialData';
 
 interface WorkRoundsEditorProps {
@@ -72,6 +77,12 @@ export const WorkRoundsEditor: React.FC<WorkRoundsEditorProps> = ({
       description: '',
       products: [],
       roundTotalCost: 0,
+      isPaid: false,
+      paymentStatus: 'unpaid',
+      paymentType: 'cash',
+      paidAmount: 0,
+      paidDate: dateStr,
+      paymentNote: '',
       createdAt: now.toISOString(),
     };
 
@@ -99,6 +110,14 @@ export const WorkRoundsEditor: React.FC<WorkRoundsEditorProps> = ({
     // Recompute total cost of products in this round
     if (target.products) {
       target.roundTotalCost = target.products.reduce((sum, p) => sum + (p.totalPrice || 0), 0);
+    }
+
+    // Auto-update paidAmount if marked as paid and not manually set
+    if (fields.isPaid === true && (target.paidAmount === 0 || target.paidAmount === undefined)) {
+      target.paidAmount = target.roundTotalCost;
+      target.paymentStatus = 'paid';
+    } else if (fields.isPaid === false && fields.paymentStatus === undefined) {
+      target.paymentStatus = 'unpaid';
     }
 
     updated[roundIndex] = target;
@@ -266,6 +285,20 @@ export const WorkRoundsEditor: React.FC<WorkRoundsEditorProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Payment Status Badge of this round */}
+                  {(() => {
+                    const payCfg = getRoundPaymentConfig(round);
+                    return (
+                      <span
+                        className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold border flex items-center gap-1 ${payCfg.badgeClass}`}
+                        title="สถานะการชำระเงินของรอบนี้"
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${payCfg.dotClass}`} />
+                        <span>{payCfg.label}</span>
+                      </span>
+                    );
+                  })()}
+
                   {/* Status Badge of this round */}
                   <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold border ${stCfg.bgClass}`}>
                     {stCfg.label}
@@ -449,11 +482,12 @@ export const WorkRoundsEditor: React.FC<WorkRoundsEditorProps> = ({
                                   <label className="block text-[10px] text-slate-500 mb-0.5">จำนวน</label>
                                   <input
                                     type="number"
-                                    min="1"
+                                    min="0.01"
+                                    step="any"
                                     value={prod.quantity || 1}
                                     onChange={(e) =>
                                       handleUpdateProduct(rIdx, pIdx, {
-                                        quantity: Math.max(1, parseFloat(e.target.value) || 1),
+                                        quantity: Math.max(0.01, parseFloat(e.target.value) || 1),
                                       })
                                     }
                                     className="w-full text-xs px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none text-center"
@@ -478,6 +512,7 @@ export const WorkRoundsEditor: React.FC<WorkRoundsEditorProps> = ({
                                   <input
                                     type="number"
                                     min="0"
+                                    step="any"
                                     value={prod.unitPrice || 0}
                                     onChange={(e) =>
                                       handleUpdateProduct(rIdx, pIdx, {
@@ -508,6 +543,194 @@ export const WorkRoundsEditor: React.FC<WorkRoundsEditorProps> = ({
                         รอบนี้ยังไม่มีการเบิกใช้สินค้า (กดปุ่ม "+ เพิ่มสินค้าในรอบนี้" หากมีสินค้าที่ใช้)
                       </div>
                     )}
+                  </div>
+
+                  {/* 💰 การชำระเงินของรอบนี้ (จ่ายเงินแยกรายรอบ) */}
+                  <div className="pt-3 border-t border-slate-200/80">
+                    <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-3 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <Wallet className="w-4 h-4 text-emerald-600" />
+                          <span className="text-xs font-bold text-slate-800">
+                            การชำระเงินประจำรอบที่ {round.roundNumber}
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            (ยอดสินค้าในรอบนี้: ฿{round.roundTotalCost.toLocaleString()})
+                          </span>
+                        </div>
+
+                        {/* Quick paid shortcut if not yet paid */}
+                        {round.paymentStatus !== 'paid' && round.roundTotalCost > 0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateRound(rIdx, {
+                                isPaid: true,
+                                paymentStatus: 'paid',
+                                paidAmount: round.roundTotalCost,
+                                paidDate: round.paidDate || round.date || new Date().toISOString().split('T')[0],
+                                paymentType: round.paymentType || 'cash',
+                              })
+                            }
+                            className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-100/70 hover:bg-emerald-100 px-2 py-1 rounded-md transition-colors flex items-center gap-1"
+                          >
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>บันทึกชำระเต็มจำนวน (฿{round.roundTotalCost.toLocaleString()})</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Payment Status Segmented Control */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleUpdateRound(rIdx, {
+                              isPaid: true,
+                              paymentStatus: 'paid',
+                              paidAmount: round.paidAmount && round.paidAmount > 0 ? round.paidAmount : round.roundTotalCost,
+                              paidDate: round.paidDate || round.date || new Date().toISOString().split('T')[0],
+                            })
+                          }
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-all ${
+                            round.isPaid || round.paymentStatus === 'paid'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>ชำระแล้วทันที</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleUpdateRound(rIdx, {
+                              isPaid: false,
+                              paymentStatus: 'partial',
+                              paidAmount: round.paidAmount || (round.roundTotalCost > 0 ? Math.round(round.roundTotalCost / 2) : 0),
+                              paidDate: round.paidDate || round.date || new Date().toISOString().split('T')[0],
+                            })
+                          }
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-all ${
+                            round.paymentStatus === 'partial'
+                              ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <Receipt className="w-3.5 h-3.5" />
+                          <span>ชำระบางส่วน</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleUpdateRound(rIdx, {
+                              isPaid: false,
+                              paymentStatus: 'credit',
+                              paymentType: round.paymentType && round.paymentType.startsWith('credit') ? round.paymentType : 'credit_30',
+                            })
+                          }
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-all ${
+                            round.paymentStatus === 'credit' || (round.paymentType && round.paymentType.startsWith('credit') && !round.isPaid)
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span>เครดิต / วางบิล</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleUpdateRound(rIdx, {
+                              isPaid: false,
+                              paymentStatus: 'unpaid',
+                              paidAmount: 0,
+                            })
+                          }
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-all ${
+                            round.paymentStatus === 'unpaid' || (!round.isPaid && !round.paymentStatus)
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>ยังไม่ชำระ / รอวางบิล</span>
+                        </button>
+                      </div>
+
+                      {/* Payment Details Form when not fully unpaid */}
+                      {(round.isPaid || round.paymentStatus === 'paid' || round.paymentStatus === 'partial' || round.paymentStatus === 'credit') && (
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 pt-1">
+                          {/* Payment Method */}
+                          <div>
+                            <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                              วิธีการชำระ
+                            </label>
+                            <select
+                              value={round.paymentType || 'cash'}
+                              onChange={(e) => handleUpdateRound(rIdx, { paymentType: e.target.value as PaymentType })}
+                              className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                            >
+                              <option value="cash">💵 เงินสด</option>
+                              <option value="credit_7">📅 เครดิต 7 วัน</option>
+                              <option value="credit_15">📅 เครดิต 15 วัน</option>
+                              <option value="credit_30">📅 เครดิต 30 วัน</option>
+                              <option value="credit_45">📅 เครดิต 45 วัน</option>
+                            </select>
+                          </div>
+
+                          {/* Paid Amount */}
+                          <div>
+                            <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                              ยอดเงินที่รับชำระ (บาท)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={round.paidAmount ?? (round.isPaid ? round.roundTotalCost : 0)}
+                              onChange={(e) =>
+                                handleUpdateRound(rIdx, {
+                                  paidAmount: Math.max(0, parseFloat(e.target.value) || 0),
+                                })
+                              }
+                              placeholder="0"
+                              className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:outline-none font-bold text-emerald-700 text-right"
+                            />
+                          </div>
+
+                          {/* Payment Date */}
+                          <div>
+                            <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                              วันที่ชำระ
+                            </label>
+                            <input
+                              type="date"
+                              value={round.paidDate || round.date || ''}
+                              onChange={(e) => handleUpdateRound(rIdx, { paidDate: e.target.value })}
+                              className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                            />
+                          </div>
+
+                          {/* Payment Note */}
+                          <div>
+                            <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                              หมายเหตุการชำระ
+                            </label>
+                            <input
+                              type="text"
+                              value={round.paymentNote || ''}
+                              onChange={(e) => handleUpdateRound(rIdx, { paymentNote: e.target.value })}
+                              placeholder="เช่น รับเงินสดหน้างาน, โอนแล้ว"
+                              className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

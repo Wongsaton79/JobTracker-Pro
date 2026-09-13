@@ -187,3 +187,164 @@ export const sortJobsLatestFirst = <T extends { updatedAt?: string; createdAt?: 
   return [...jobsList].sort((a, b) => getJobTimestamp(b) - getJobTimestamp(a));
 };
 
+// 💰 คำนวณสรุปการเงินและการชำระเงินของงาน (รองรับทั้งชำระแยกรายรอบ และชำระรวม)
+export interface JobFinancialSummary {
+  totalPrice: number;
+  totalPaid: number;
+  remaining: number;
+  status: 'paid' | 'partial' | 'unpaid' | 'credit';
+  statusLabel: string;
+  badgeClass: string;
+  isFullyPaid: boolean;
+  paidCount: number;
+  totalRounds: number;
+}
+
+export const calculateJobFinancials = (job: {
+  price?: number;
+  totalPaidAmount?: number;
+  remainingAmount?: number;
+  overallPaymentStatus?: 'paid' | 'partial' | 'unpaid' | 'credit';
+  paymentType?: PaymentType;
+  workRounds?: import('../types').WorkRound[];
+}): JobFinancialSummary => {
+  const rounds = job.workRounds || [];
+  const totalPrice = job.price !== undefined ? Number(job.price) : 0;
+
+  // If work rounds exist, calculate based on round-level payments
+  if (rounds.length > 0) {
+    let sumPaid = 0;
+    let paidRoundsCount = 0;
+
+    rounds.forEach((r) => {
+      if (r.isPaid || r.paymentStatus === 'paid') {
+        const amt = r.paidAmount !== undefined ? Number(r.paidAmount) : Number(r.roundTotalCost || 0);
+        sumPaid += amt;
+        paidRoundsCount += 1;
+      } else if (r.paymentStatus === 'partial') {
+        const amt = Number(r.paidAmount || 0);
+        sumPaid += amt;
+      }
+    });
+
+    // If explicit totalPaidAmount exists and no round paid, fallback to job level
+    if (sumPaid === 0 && job.totalPaidAmount !== undefined && job.totalPaidAmount > 0) {
+      sumPaid = Number(job.totalPaidAmount);
+    }
+
+    const remaining = Math.max(0, totalPrice - sumPaid);
+    const isFullyPaid = totalPrice > 0 ? remaining <= 0 : sumPaid > 0;
+
+    let status: 'paid' | 'partial' | 'unpaid' | 'credit' = 'unpaid';
+    let statusLabel = 'รอรับชำระ';
+    let badgeClass = 'bg-amber-100 text-amber-800 border-amber-300';
+
+    if (isFullyPaid) {
+      status = 'paid';
+      statusLabel = 'ชำระครบแล้ว';
+      badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+    } else if (sumPaid > 0) {
+      status = 'partial';
+      statusLabel = `ชำระบางส่วน (ค้าง ฿${remaining.toLocaleString()})`;
+      badgeClass = 'bg-sky-100 text-sky-800 border-sky-300';
+    } else if (job.paymentType && job.paymentType.startsWith('credit')) {
+      status = 'credit';
+      statusLabel = getPaymentTypeConfig(job.paymentType).label;
+      badgeClass = 'bg-indigo-100 text-indigo-800 border-indigo-300';
+    }
+
+    return {
+      totalPrice,
+      totalPaid: sumPaid,
+      remaining,
+      status,
+      statusLabel,
+      badgeClass,
+      isFullyPaid,
+      paidCount: paidRoundsCount,
+      totalRounds: rounds.length,
+    };
+  }
+
+  // Fallback if no rounds: based on job-level fields
+  const totalPaid = Number(job.totalPaidAmount || 0);
+  const remaining = job.remainingAmount !== undefined ? Number(job.remainingAmount) : Math.max(0, totalPrice - totalPaid);
+  const isFullyPaid = totalPrice > 0 && remaining <= 0;
+
+  let status: 'paid' | 'partial' | 'unpaid' | 'credit' = job.overallPaymentStatus || 'unpaid';
+  let statusLabel = 'รอรับชำระ';
+  let badgeClass = 'bg-amber-100 text-amber-800 border-amber-300';
+
+  if (isFullyPaid || status === 'paid') {
+    status = 'paid';
+    statusLabel = 'ชำระครบแล้ว';
+    badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+  } else if (totalPaid > 0 || status === 'partial') {
+    status = 'partial';
+    statusLabel = `ชำระบางส่วน (ค้าง ฿${remaining.toLocaleString()})`;
+    badgeClass = 'bg-sky-100 text-sky-800 border-sky-300';
+  } else if (job.paymentType && job.paymentType.startsWith('credit')) {
+    status = 'credit';
+    statusLabel = getPaymentTypeConfig(job.paymentType).label;
+    badgeClass = 'bg-indigo-100 text-indigo-800 border-indigo-300';
+  }
+
+  return {
+    totalPrice,
+    totalPaid,
+    remaining,
+    status,
+    statusLabel,
+    badgeClass,
+    isFullyPaid,
+    paidCount: isFullyPaid ? 1 : 0,
+    totalRounds: 0,
+  };
+};
+
+export const getRoundPaymentConfig = (round: {
+  isPaid?: boolean;
+  paymentStatus?: 'paid' | 'unpaid' | 'partial' | 'credit';
+  paidAmount?: number;
+  roundTotalCost?: number;
+  paymentType?: PaymentType;
+}) => {
+  const isPaid = round.isPaid || round.paymentStatus === 'paid';
+  const isPartial = round.paymentStatus === 'partial';
+  const isCredit = round.paymentStatus === 'credit' || (round.paymentType && round.paymentType.startsWith('credit'));
+
+  if (isPaid) {
+    return {
+      label: 'ชำระเงินแล้ว',
+      badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      dotClass: 'bg-emerald-500',
+      status: 'paid' as const,
+    };
+  }
+
+  if (isPartial) {
+    return {
+      label: `ชำระบางส่วน (฿${(round.paidAmount || 0).toLocaleString()})`,
+      badgeClass: 'bg-sky-100 text-sky-800 border-sky-300',
+      dotClass: 'bg-sky-500',
+      status: 'partial' as const,
+    };
+  }
+
+  if (isCredit) {
+    return {
+      label: round.paymentType ? getPaymentTypeConfig(round.paymentType).label : 'เครดิต / วางบิล',
+      badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-300',
+      dotClass: 'bg-indigo-500',
+      status: 'credit' as const,
+    };
+  }
+
+  return {
+    label: 'ยังไม่ชำระ / รอวางบิล',
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+    dotClass: 'bg-amber-500',
+    status: 'unpaid' as const,
+  };
+};
+

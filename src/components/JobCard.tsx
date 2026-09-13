@@ -16,7 +16,13 @@ import {
   MoreVertical,
 } from 'lucide-react';
 import { JobItem, JobStatus } from '../types';
-import { formatCurrency, formatThaiDate, getPaymentTypeConfig, getStatusConfig } from '../utils/formatters';
+import {
+  calculateJobFinancials,
+  formatCurrency,
+  formatThaiDate,
+  getPaymentTypeConfig,
+  getStatusConfig,
+} from '../utils/formatters';
 
 interface JobCardProps {
   job: JobItem;
@@ -188,22 +194,44 @@ export const JobCard: React.FC<JobCardProps> = ({
         </div>
 
         {/* Commercial Section (Price & Payment) */}
-        <div className="pt-3 border-t border-slate-100 flex items-end justify-between">
-          <div>
-            <span className="text-[11px] text-slate-400 block">มูลค่างาน</span>
-            <span className="text-base font-bold text-emerald-600">
-              {formatCurrency(job.price)}
-            </span>
-          </div>
+        {(() => {
+          const fin = calculateJobFinancials(job);
+          return (
+            <div className="pt-2.5 border-t border-slate-100 space-y-1.5">
+              <div className="flex items-end justify-between">
+                <div>
+                  <span className="text-[10px] text-slate-400 block">มูลค่างานรวม</span>
+                  <span className="text-base font-bold text-slate-900">
+                    {formatCurrency(fin.totalPrice)}
+                  </span>
+                </div>
 
-          <div className="text-right">
-            <span
-              className={`inline-block text-[11px] px-2 py-0.5 rounded-md border font-medium ${paymentCfg.badgeClass}`}
-            >
-              {paymentCfg.label}
-            </span>
-          </div>
-        </div>
+                <div className="text-right flex flex-col items-end gap-1">
+                  <span
+                    className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-bold ${fin.badgeClass}`}
+                  >
+                    {fin.statusLabel}
+                  </span>
+                </div>
+              </div>
+
+              {/* Per-Round Payment Detail Pill */}
+              {(job.workRounds && job.workRounds.length > 0) && (
+                <div className="flex items-center justify-between text-[11px] bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                  <span className="text-slate-500">
+                    รอบชำระแล้ว <strong className="text-emerald-700">{fin.paidCount}/{job.workRounds.length}</strong>
+                  </span>
+                  <span className="font-semibold text-slate-700">
+                    ชำระ ฿{fin.totalPaid.toLocaleString()}
+                    {fin.remaining > 0 ? (
+                      <span className="text-amber-600 font-normal"> (ค้าง ฿{fin.remaining.toLocaleString()})</span>
+                    ) : ''}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Card Action Footer */}

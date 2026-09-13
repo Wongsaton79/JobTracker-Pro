@@ -51,7 +51,9 @@ export interface ProductItem {
   notes?: string;
 }
 
-// 👷 รอบการเข้าหน้างาน (แต่ละรอบเปลี่ยนทีมช่างได้ และมีสินค้ากลุ่มเฉพาะได้)
+// 👷 รอบการเข้าหน้างาน (แต่ละรอบเปลี่ยนทีมช่างได้ มีสินค้ากลุ่มเฉพาะได้ และบันทึกการชำระเงินแยกแต่ละรอบได้)
+export type RoundPaymentStatus = 'paid' | 'unpaid' | 'partial' | 'credit';
+
 export interface WorkRound {
   id: string;
   roundNumber: number; // รอบที่ 1, 2, 3...
@@ -63,6 +65,14 @@ export interface WorkRound {
   description?: string; // บันทึกรายละเอียดการเข้าหน้างาน
   products: ProductItem[]; // รายการสินค้าที่ใช้ในรอบนี้ (มีกี่ชิ้นก็ได้ หรือไม่มีก็ได้)
   roundTotalCost: number; // ยอดรวมสินค้าในรอบนี้
+  // 💰 การชำระเงินประจำรอบนี้ (จ่ายเงินแยกรายรอบ)
+  isPaid?: boolean; // ชำระเงินในรอบนี้แล้วหรือไม่
+  paymentStatus?: RoundPaymentStatus; // 'paid' (ชำระแล้ว) | 'unpaid' (ยังไม่ชำระ) | 'partial' (ชำระบางส่วน) | 'credit' (เครดิต/วางบิล)
+  paymentType?: PaymentType; // รูปแบบการชำระในรอบนี้ เช่น cash (เงินสด), transfer (เงินโอน), credit_7, credit_15, credit_30, credit_45
+  paidAmount?: number; // ยอดเงินที่รับชำระในรอบนี้ (บาท)
+  paidDate?: string; // วันที่ชำระเงิน (YYYY-MM-DD)
+  paymentProofUrl?: string; // ลิงก์สลิปโอนเงิน หรือรูปถ่ายใบเสร็จ
+  paymentNote?: string; // หมายเหตุการชำระเงิน เช่น "ชำระเงินสดหน้างานกับโฟร์แมน", "โอนเข้าบัญชี SCB เรียบร้อย"
   createdAt: string;
 }
 
@@ -105,7 +115,10 @@ export interface JobItem {
   productBrand: string; // แบรนด์สินค้าหลัก
   productDetails: string; // สรุปสินค้า
   price: number; // ราคาเท่าไหร่ (บาท)
-  paymentType: PaymentType; // เงินสด / เครดิต
+  totalPaidAmount?: number; // ยอดรวมที่ชำระแล้ว (รวมทุกรอบ)
+  remainingAmount?: number; // ยอดคงค้างชำระ (บาท)
+  overallPaymentStatus?: 'paid' | 'partial' | 'unpaid' | 'credit'; // สถานะการชำระภาพรวม
+  paymentType: PaymentType; // เงินสด / เครดิต (ค่าเริ่มต้น/ภาพรวม)
   notes: string; // หมายเหตุเพิ่มเติม
   assignedTo?: string; // ทีมช่าง / ผู้รับผิดชอบปัจจุบัน
   workRounds?: WorkRound[]; // รอบการเข้าทำงานทั้งหมด (หลายรอบ พร้อมเปลี่ยนทีมช่างและสินค้าต่อรอบ)

@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { JobItem } from '../types';
-import { getStatusConfig, getPaymentTypeConfig } from './formatters';
+import { getStatusConfig, getPaymentTypeConfig, calculateJobFinancials } from './formatters';
 
 /**
  * Export all jobs to a clean Microsoft Excel (.xlsx) workbook
@@ -12,6 +12,7 @@ export const exportJobsToExcel = (jobs: JobItem[], filename = 'JobTracker_Report
 
   // 1. Prepare Main Data Table
   const rows = jobs.map((job, index) => {
+    const fin = calculateJobFinancials(job);
     const mapsLink =
       job.location?.lat && job.location?.lng
         ? `https://www.google.com/maps/search/?api=1&query=${job.location.lat},${job.location.lng}`
@@ -34,8 +35,13 @@ export const exportJobsToExcel = (jobs: JobItem[], filename = 'JobTracker_Report
       'ช่างผู้รับผิดชอบ': job.assignedTo || '-',
       'แบรนด์สินค้า': job.productBrand || '-',
       'รายละเอียดสินค้า/รุ่น': job.productDetails || '-',
-      'ยอดเงิน (บาท)': job.price || 0,
-      'การชำระเงิน': getPaymentTypeConfig(job.paymentType).label,
+      'ยอดเงินรวม (บาท)': fin.totalPrice,
+      'ยอดชำระแล้ว (บาท)': fin.totalPaid,
+      'ยอดคงค้าง (บาท)': fin.remaining,
+      'สถานะการชำระเงิน': fin.statusLabel,
+      'จำนวนรอบการทำงาน': (job.workRounds || []).length,
+      'รอบที่ชำระเงินแล้ว': `${fin.paidCount}/${(job.workRounds || []).length || 1}`,
+      'เงื่อนไขการชำระ': getPaymentTypeConfig(job.paymentType).label,
       'ที่อยู่หน้างาน': job.location?.address || '-',
       'พิกัด Google Maps': mapsLink,
       'จำนวนรูปถ่าย': (job.photos || []).length,

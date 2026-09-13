@@ -21,9 +21,17 @@ import {
   ShoppingBag,
   Plus,
   Navigation,
+  Wallet,
 } from 'lucide-react';
 import { JobItem, JobPhoto, JobStatus } from '../types';
-import { formatCurrency, formatThaiDate, getPaymentTypeConfig, getStatusConfig } from '../utils/formatters';
+import {
+  calculateJobFinancials,
+  formatCurrency,
+  formatThaiDate,
+  getPaymentTypeConfig,
+  getRoundPaymentConfig,
+  getStatusConfig,
+} from '../utils/formatters';
 
 interface JobDetailModalProps {
   job: JobItem | null;
@@ -163,33 +171,48 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
             </div>
 
             {/* Commercial & Pricing */}
-            <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200 space-y-2">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                สินค้า ราคา & เงื่อนไขชำระเงิน
-              </h4>
-              <div className="space-y-1.5 text-xs text-slate-700">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500">แบรนด์สินค้า:</span>
-                  <span className="font-bold text-slate-800">{job.productBrand}</span>
-                </div>
-                {job.productDetails && (
-                  <div className="flex items-start justify-between">
-                    <span className="text-slate-500">รายละเอียด:</span>
-                    <span className="font-medium text-right max-w-[200px]">{job.productDetails}</span>
+            {(() => {
+              const fin = calculateJobFinancials(job);
+              return (
+                <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      สรุปราคา & การชำระเงิน
+                    </h4>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold border ${fin.badgeClass}`}>
+                      {fin.statusLabel}
+                    </span>
                   </div>
-                )}
-                <div className="flex items-center justify-between pt-1 border-t border-slate-200">
-                  <span className="text-slate-500">ยอดรวมทั้งสิ้น:</span>
-                  <span className="text-base font-bold text-emerald-600">{formatCurrency(job.price)}</span>
+
+                  <div className="space-y-1.5 text-xs text-slate-700">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">แบรนด์สินค้า:</span>
+                      <span className="font-bold text-slate-800">{job.productBrand}</span>
+                    </div>
+                    {job.productDetails && (
+                      <div className="flex items-start justify-between">
+                        <span className="text-slate-500">รายละเอียด:</span>
+                        <span className="font-medium text-right max-w-[200px]">{job.productDetails}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200">
+                      <span className="text-slate-500">ยอดรวมทั้งสิ้น:</span>
+                      <span className="text-base font-bold text-slate-900">{formatCurrency(fin.totalPrice)}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div className="bg-emerald-50/80 p-2 rounded-lg border border-emerald-200">
+                        <div className="text-[10px] text-emerald-800 font-medium">ชำระแล้ว ({fin.paidCount}/{rounds.length || 1} รอบ)</div>
+                        <div className="text-sm font-bold text-emerald-700">฿{fin.totalPaid.toLocaleString()}</div>
+                      </div>
+                      <div className={`p-2 rounded-lg border ${fin.remaining > 0 ? 'bg-amber-50/80 border-amber-200' : 'bg-slate-100 border-slate-200'}`}>
+                        <div className={`text-[10px] font-medium ${fin.remaining > 0 ? 'text-amber-800' : 'text-slate-600'}`}>คงค้างชำระ</div>
+                        <div className={`text-sm font-bold ${fin.remaining > 0 ? 'text-amber-700' : 'text-slate-700'}`}>฿{fin.remaining.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500">การชำระเงิน:</span>
-                  <span className={`text-[11px] px-2 py-0.5 rounded-md border font-bold ${paymentCfg.badgeClass}`}>
-                    {paymentCfg.label}
-                  </span>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
 
           {/* Work Rounds & Multi-Item Product Breakdown */}
@@ -235,7 +258,20 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                          {/* Round Payment Badge */}
+                          {(() => {
+                            const roundPayCfg = getRoundPaymentConfig(round);
+                            return (
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 ${roundPayCfg.badgeClass}`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${roundPayCfg.dotClass}`} />
+                                <span>{roundPayCfg.label}</span>
+                              </span>
+                            );
+                          })()}
+
                           <span className="flex items-center gap-1">
                             <User className="w-3 h-3 text-indigo-600" />
                             <strong className="text-slate-700">{round.teamName}</strong>
@@ -291,6 +327,36 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                           รอบนี้ไม่มีรายการเบิกสินค้า
                         </div>
                       )}
+
+                      {/* Round Payment Info Footer */}
+                      <div className="px-3 py-2 bg-slate-50/70 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                        <div className="flex items-center gap-1.5">
+                          <Wallet className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="font-medium text-slate-600">การเงินรอบที่ {round.roundNumber}:</span>
+                          {round.isPaid || round.paymentStatus === 'paid' ? (
+                            <span className="font-bold text-emerald-700">
+                              ชำระแล้ว ฿{(round.paidAmount ?? round.roundTotalCost).toLocaleString()}
+                              {round.paidDate ? ` (${formatThaiDate(round.paidDate, 'short')})` : ''}
+                            </span>
+                          ) : round.paymentStatus === 'partial' ? (
+                            <span className="font-bold text-sky-700">
+                              ชำระบางส่วน ฿{(round.paidAmount || 0).toLocaleString()} (คงค้าง ฿{Math.max(0, round.roundTotalCost - (round.paidAmount || 0)).toLocaleString()})
+                            </span>
+                          ) : round.paymentStatus === 'credit' ? (
+                            <span className="font-bold text-indigo-700">
+                              เงื่อนไข {round.paymentType ? getPaymentTypeConfig(round.paymentType).label : 'เครดิต'}
+                            </span>
+                          ) : (
+                            <span className="text-amber-700 font-medium">ยังไม่ชำระ / รอวางบิล</span>
+                          )}
+                        </div>
+
+                        {round.paymentNote && (
+                          <span className="text-slate-500 italic bg-white px-2 py-0.5 rounded border border-slate-200">
+                            หมายเหตุ: {round.paymentNote}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
