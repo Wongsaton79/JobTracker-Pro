@@ -235,7 +235,7 @@ function doPost(e) {
     }
 
     // 1. ทดสอบการเชื่อมต่อ (Test Connection)
-    if (data && (data.action === 'test_connection' || data.action === 'test')) {
+    if (data && (data.action === 'test_connection' || data.action === 'test' || data.action === 'test_line')) {
       var sampleJob = data.job || {
         jobCode: "TEST-" + Date.now().toString().slice(-4),
         title: "ทดสอบการเชื่อมต่อระบบ JobTracker Pro",

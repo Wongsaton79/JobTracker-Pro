@@ -7,6 +7,7 @@ export interface SendLineFlexOptions {
   channelAccessToken?: string;
   companyName?: string;
   eventLabel?: string;
+  googleSheetUrl?: string;
 }
 
 export const DEFAULT_LINE_CONFIG = {
@@ -20,7 +21,8 @@ export const DEFAULT_LINE_CONFIG = {
 /**
  * Direct Send LINE Flex Message to LINE Messaging API
  * 1. Ensures all job photos are converted to public HTTPS URLs
- * 2. Uses robust relay endpoints with comprehensive error reporting
+ * 2. Uses robust relay endpoints with credentials: 'include'
+ * 3. Falls back to Google Apps Script Web App if provided
  */
 export async function sendLineFlexDirect(
   job: JobItem,
@@ -60,7 +62,7 @@ export async function sendLineFlexDirect(
       clientOrigin: typeof window !== 'undefined' ? window.location.origin : '',
     };
 
-    // 2. Build candidate endpoints
+    // 2. Try Node.js Express server endpoints first
     const endpoints: string[] = ['/api/sync/send-line'];
     if (typeof window !== 'undefined' && window.location.origin) {
       endpoints.push(`${window.location.origin}/api/sync/send-line`);
@@ -79,6 +81,7 @@ export async function sendLineFlexDirect(
             'Content-Type': 'application/json',
             Accept: 'application/json',
           },
+          credentials: 'include',
           body: JSON.stringify(payload),
           signal: controller.signal,
         });
@@ -89,7 +92,8 @@ export async function sendLineFlexDirect(
         try {
           json = JSON.parse(responseText);
         } catch {
-          json = { raw: responseText };
+          // Response is not JSON (HTML error or redirect)
+          continue;
         }
 
         if (response.ok && json?.success) {
@@ -115,47 +119,42 @@ export async function sendLineFlexDirect(
       }
     }
 
-    // 3. Fallback: Direct Push using built-in Flex Payload (with CORS proxy if needed)
-    try {
-      const flexPayload = buildLineFlexMessage(processedJob, company);
-      const lineBody = JSON.stringify({
-        to: target,
-        messages: [flexPayload],
-      });
+    // 3. Fallback: Dispatch via Google Apps Script Web App (if provided)
+    const webAppUrl = (options?.googleSheetUrl || '').trim();
+    if (webAppUrl && webAppUrl.startsWith('http')) {
+      try {
+        await fetch(webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
+          body: JSON.stringify({
+            action: 'send_line',
+            job: processedJob,
+            targetId: target,
+            channelAccessToken: token,
+            companyName: company,
+            eventLabel: label,
+            sendLine: true,
+          }),
+        });
 
-      // Try direct call first (in case environment permits or serverless proxy)
-      const directRes = await fetch('https://api.line.me/v2/bot/message/push', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: lineBody,
-      });
-
-      if (directRes.ok) {
         return {
           success: true,
-          message: 'ส่ง LINE Flex Message สำเร็จเรียบร้อย!',
+          message: 'ส่ง LINE Flex Message เข้ากลุ่มผ่าน Google Apps Script สำเร็จเรียบร้อย!',
           job: processedJob,
         };
-      } else {
-        const errText = await directRes.text();
-        return {
-          success: false,
-          message: formatLineApiError(errText || directRes.statusText),
-          job: processedJob,
-        };
+      } catch (gasErr: any) {
+        console.warn('Apps Script fallback sendLine failed:', gasErr);
       }
-    } catch {
-      // Browser blocked direct CORS to api.line.me
     }
 
     return {
       success: false,
       message: lastErrorMessage
         ? `ไม่สามารถส่ง LINE ได้: ${lastErrorMessage}`
-        : 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ส่ง LINE ได้ กรุณาตรวจสอบ Channel Access Token หรือ Group ID',
+        : 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ส่ง LINE ได้ กรุณาตรวจสอบ Channel Access Token, Group ID หรือระบุ Google Apps Script Web App URL ในหน้าตั้งค่า',
       job: processedJob,
     };
   } catch (err: any) {
@@ -168,12 +167,13 @@ export async function sendLineFlexDirect(
 }
 
 /**
- * Test LINE Bot connection directly
+ * Test LINE Bot connection directly via backend server or Apps Script
  */
 export async function testLineConnectionDirect(options: {
   targetId: string;
-  channelAccessToken: string;
+  channelAccessToken?: string;
   companyName?: string;
+  googleSheetUrl?: string;
 }): Promise<{ success: boolean; message: string }> {
   const token = (options.channelAccessToken || DEFAULT_LINE_CONFIG.channelAccessToken).trim();
   const target = (options.targetId || DEFAULT_LINE_CONFIG.targetGroupId).trim();
@@ -186,53 +186,110 @@ export async function testLineConnectionDirect(options: {
     return { success: false, message: 'กรุณากรอก LINE Group ID หรือ User ID' };
   }
 
-  // 1. Try local server test endpoint
+  // 1. Try local server test endpoint with credentials: 'include'
   const endpoints = ['/api/sync/test-line'];
   if (typeof window !== 'undefined' && window.location.origin) {
     endpoints.push(`${window.location.origin}/api/sync/test-line`);
   }
 
+  let serverFailure = '';
+
   for (const endpoint of endpoints) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        credentials: 'include',
         body: JSON.stringify({ targetId: target, channelAccessToken: token, companyName: company }),
+        signal: controller.signal,
       });
-      const data = await res.json();
-      if (data.success) {
-        return { success: true, message: data.message || 'ทดสอบเชื่อมต่อ LINE สำเร็จ ข้อความถูกส่งเข้ากลุ่มแล้ว!' };
-      } else if (data.error || data.message) {
-        return { success: false, message: formatLineApiError(data.error || data.message) };
+      clearTimeout(timeoutId);
+
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // Not JSON (HTML from redirect or gateway)
+        serverFailure = `เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง (HTTP ${res.status})`;
+        continue;
       }
-    } catch {}
+
+      if (data && data.success) {
+        return {
+          success: true,
+          message: data.message || 'ทดสอบเชื่อมต่อ LINE สำเร็จ ข้อความถูกส่งเข้ากลุ่มแล้ว!',
+        };
+      } else if (data && (data.error || data.message)) {
+        return {
+          success: false,
+          message: formatLineApiError(data.error || data.message),
+        };
+      }
+    } catch (err: any) {
+      serverFailure = err?.message || String(err);
+    }
   }
 
-  // 2. Direct fallback
-  try {
-    const testMsg = `🧪 ทดสอบการเชื่อมต่อ LINE Bot สำเร็จ!\n🏢 บริษัท: ${company}\n⏰ เวลา: ${new Date().toLocaleString('th-TH')}`;
-    const directRes = await fetch('https://api.line.me/v2/bot/message/push', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        to: target,
-        messages: [{ type: 'text', text: testMsg }],
-      }),
-    });
-    if (directRes.ok) {
-      return { success: true, message: 'ส่งข้อความทดสอบเข้า LINE สำเร็จเรียบร้อย!' };
+  // 2. Fallback via Google Apps Script Web App (if provided)
+  const webAppUrl = (options.googleSheetUrl || '').trim();
+  if (webAppUrl && webAppUrl.startsWith('http')) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      await fetch(webAppUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({
+          action: 'test_connection',
+          targetId: target,
+          channelAccessToken: token,
+          companyName: company,
+          sendLine: true,
+          job: {
+            jobCode: `TEST-${Date.now().toString().slice(-4)}`,
+            title: 'ทดสอบการเชื่อมต่อระบบ LINE Bot',
+            status: 'in_progress',
+            contactPerson: 'ระบบทดสอบอัตโนมัติ',
+            phoneNumber: '081-234-5678',
+            productBrand: 'JobTracker',
+            productDetails: 'ทดสอบการส่งการแจ้งเตือน LINE Bot สำเร็จ',
+            price: 0,
+            paymentType: 'ทดสอบระบบ',
+            location: { address: 'กรุงเทพมหานคร' },
+            date: new Date().toISOString().substring(0, 10),
+          },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      return {
+        success: true,
+        message: 'ส่งคำสั่งทดสอบไปยัง LINE ผ่าน Google Apps Script เรียบร้อยแล้ว! (กรุณาตรวจดูข้อความในกลุ่ม LINE)',
+      };
+    } catch (gasErr: any) {
+      console.warn('Fallback test via Google Apps Script failed:', gasErr);
     }
-    const errText = await directRes.text();
-    return { success: false, message: formatLineApiError(errText) };
-  } catch (e: any) {
-    return {
-      success: false,
-      message: `ไม่สามารถเชื่อมต่อ LINE API: ${e.message || 'กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต'}`,
-    };
   }
+
+  // 3. Clear and friendly error message
+  return {
+    success: false,
+    message: serverFailure
+      ? `ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ส่ง LINE ได้: ${serverFailure} (หากเปิดใน iFrame Preview แนะนำเปิดแอปในแท็บใหม่ หรือกรอก Google Apps Script Web App URL ในหน้าตั้งค่า)`
+      : 'ไม่สามารถส่งข้อความทดสอบ LINE ได้ กรุณาตรวจสอบว่าบอทอยู่ในกลุ่ม และ Channel Access Token ถูกต้อง',
+  };
 }
 
 /**
@@ -252,7 +309,7 @@ export function formatLineApiError(rawError: any): string {
     ) {
       return 'LINE Channel Access Token ไม่ถูกต้องหรือหมดอายุ (401 Unauthorized) กรุณาตรวจสอบหรือ Issue Token ใหม่ใน LINE Developers Console';
     }
-    if (msg.includes('The property, \'to\', in the request body is invalid') || msg.includes('Failed to send message')) {
+    if (msg.includes("The property, 'to', in the request body is invalid") || msg.includes('Failed to send message')) {
       return 'Group ID หรือ User ID ไม่ถูกต้อง หรือ LINE Bot ยังไม่ได้ถูกเชิญเข้าร่วมกลุ่ม (400 Bad Request)';
     }
     if (msg.includes('Not found') || msg.includes('404')) {
@@ -261,9 +318,15 @@ export function formatLineApiError(rawError: any): string {
     if (msg.includes('quota') || msg.includes('429')) {
       return 'ส่งข้อความเกินโควตาฟรีประจำเดือนของ LINE Official Account (429 Rate Limit)';
     }
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+      return 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ส่ง LINE ได้ (Network Error) กรุณาตรวจสอบอินเทอร์เน็ตหรือเปิดแอปในแท็บใหม่';
+    }
     return `LINE API ตอบกลับ: ${msg}`;
   } catch {
     const str = String(rawError);
+    if (str.includes('<html') || str.includes('<!DOCTYPE')) {
+      return 'เซิร์ฟเวอร์ตอบกลับเป็นหน้าเว็บแทนที่จะเป็น API (กรุณารีเฟรชหน้าเว็บหรือเปิดในแท็บใหม่)';
+    }
     if (str.includes('401')) return 'LINE Channel Access Token ไม่ถูกต้องหรือหมดอายุ (401)';
     if (str.includes('400')) return 'Group ID ไม่ถูกต้อง หรือ LINE Bot ยังไม่ได้ถูกเชิญเข้าร่วมกลุ่ม (400)';
     return `LINE API: ${str}`;

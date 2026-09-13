@@ -26,7 +26,11 @@ import {
   fetchJobsFromFirebaseOnce,
   DEFAULT_FIREBASE_CONFIG,
 } from '../utils/firebaseSync';
-import { sendLineFlexDirect, testLineConnectionDirect } from '../utils/lineFlexSender';
+import {
+  sendLineFlexDirect,
+  testLineConnectionDirect,
+  DEFAULT_LINE_CONFIG,
+} from '../utils/lineFlexSender';
 
 interface FirebaseSettingsModalProps {
   isOpen: boolean;
@@ -124,8 +128,13 @@ export const FirebaseSettingsModal: React.FC<FirebaseSettingsModalProps> = ({
     setIsTestingBot(true);
     setStatusMessage(null);
 
-    const target = (formData.lineTargetGroupId || formData.lineTargetUserId || '').trim();
-    const token = (formData.lineChannelAccessToken || '').trim();
+    const target = (
+      formData.lineTargetGroupId ||
+      formData.lineTargetUserId ||
+      DEFAULT_LINE_CONFIG.targetGroupId ||
+      ''
+    ).trim();
+    const token = (formData.lineChannelAccessToken || DEFAULT_LINE_CONFIG.channelAccessToken || '').trim();
 
     if (!token) {
       setStatusMessage({ text: 'กรุณากรอก LINE Channel Access Token ก่อนทดสอบ', type: 'error' });
@@ -143,6 +152,7 @@ export const FirebaseSettingsModal: React.FC<FirebaseSettingsModalProps> = ({
         targetId: target,
         channelAccessToken: token,
         companyName: formData.companyName,
+        googleSheetUrl: formData.googleSheetUrl,
       });
 
       if (res.success) {
@@ -176,8 +186,13 @@ export const FirebaseSettingsModal: React.FC<FirebaseSettingsModalProps> = ({
     setStatusMessage(null);
 
     const targetJob = jobs[0];
-    const target = (formData.lineTargetGroupId || formData.lineTargetUserId || '').trim();
-    const token = (formData.lineChannelAccessToken || '').trim();
+    const target = (
+      formData.lineTargetGroupId ||
+      formData.lineTargetUserId ||
+      DEFAULT_LINE_CONFIG.targetGroupId ||
+      ''
+    ).trim();
+    const token = (formData.lineChannelAccessToken || DEFAULT_LINE_CONFIG.channelAccessToken || '').trim();
 
     if (!token) {
       setStatusMessage({ text: 'กรุณากรอก LINE Channel Access Token ก่อนทดสอบ', type: 'error' });
@@ -195,6 +210,7 @@ export const FirebaseSettingsModal: React.FC<FirebaseSettingsModalProps> = ({
         targetId: target,
         channelAccessToken: token,
         companyName: formData.companyName,
+        googleSheetUrl: formData.googleSheetUrl,
         eventLabel: '🧪 ทดสอบการส่งข้อความ LINE Flex',
       });
 

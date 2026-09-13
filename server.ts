@@ -9,7 +9,13 @@ const PORT = 3000;
 
 // CORS Middleware to ensure requests from all devices/origins succeed
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   if (req.method === 'OPTIONS') {
@@ -751,6 +757,13 @@ app.post('/api/sync/send-line', async (req, res) => {
 // ==========================================
 // 🌟 API ROUTE 3: Direct LINE Connection Test
 // ==========================================
+app.get('/api/sync/test-line', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'LINE test endpoint is ready. Send POST with targetId and channelAccessToken to test delivery.',
+  });
+});
+
 app.post('/api/sync/test-line', async (req, res) => {
   try {
     const { targetId, channelAccessToken, companyName } = req.body;
