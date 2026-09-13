@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp,
   CheckCircle2,
@@ -32,34 +32,62 @@ import {
   Area,
 } from 'recharts';
 import { JobItem } from '../types';
-import { formatCurrency, formatThaiDate, getPaymentTypeConfig, getStatusConfig } from '../utils/formatters';
+import {
+  formatCurrency,
+  formatThaiDate,
+  formatThaiMonthYear,
+  parseDateParts,
+  calculateJobFinancials,
+  getPaymentTypeConfig,
+  getStatusConfig,
+} from '../utils/formatters';
 
 interface MonthlyDashboardProps {
   jobs: JobItem[];
 }
 
 export const MonthlyDashboard: React.FC<MonthlyDashboardProps> = ({ jobs }) => {
-  // Extract all unique year-months from jobs
+  // Extract all unique year-months from jobs (normalized to YYYY-MM)
   const availableMonths = useMemo(() => {
     const set = new Set<string>();
     jobs.forEach((j) => {
-      if (j.date) {
-        const ym = j.date.substring(0, 7); // YYYY-MM
-        set.add(ym);
+      const parsed = parseDateParts(j.date);
+      if (parsed) {
+        set.add(parsed.yearMonth); // YYYY-MM
       }
     });
-    // Add current month if empty
-    const currentYM = new Date().toISOString().substring(0, 7);
+
+    // Always ensure current month is present
+    const now = new Date();
+    const currentYM = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
     set.add(currentYM);
+
     return Array.from(set).sort().reverse();
   }, [jobs]);
 
-  const [selectedMonth, setSelectedMonth] = useState<string>(availableMonths[0] || 'all');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    for (const j of jobs) {
+      const parsed = parseDateParts(j.date);
+      if (parsed) return parsed.yearMonth;
+    }
+    const now = new Date();
+    return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+  });
 
-  // Filter jobs by selected month
+  // Ensure selectedMonth stays valid when jobs/availableMonths change
+  useEffect(() => {
+    if (selectedMonth !== 'all' && !availableMonths.includes(selectedMonth)) {
+      setSelectedMonth(availableMonths[0] || 'all');
+    }
+  }, [availableMonths, selectedMonth]);
+
+  // Filter jobs by selected month using robust normalized year-month comparison
   const monthlyJobs = useMemo(() => {
     if (selectedMonth === 'all') return jobs;
-    return jobs.filter((j) => j.date && j.date.startsWith(selectedMonth));
+    return jobs.filter((j) => {
+      const parsed = parseDateParts(j.date);
+      return parsed ? parsed.yearMonth === selectedMonth : false;
+    });
   }, [jobs, selectedMonth]);
 
   // Key performance indicators
@@ -161,28 +189,20 @@ export const MonthlyDashboard: React.FC<MonthlyDashboardProps> = ({ jobs }) => {
     const dayMap: Record<string, { date: string; day: string; count: number; amount: number }> = {};
 
     monthlyJobs.forEach((j) => {
-      const day = j.date ? j.date.split('-')[2] : '01';
-      const key = j.date;
+      const parsed = parseDateParts(j.date);
+      const dayNum = parsed ? parsed.day : 1;
+      const key = parsed ? parsed.standardDate : (j.date || '01');
+      const fin = calculateJobFinancials(j);
+
       if (!dayMap[key]) {
-        dayMap[key] = { date: key, day: `วันที่ ${parseInt(day)}`, count: 0, amount: 0 };
+        dayMap[key] = { date: key, day: `วันที่ ${dayNum}`, count: 0, amount: 0 };
       }
       dayMap[key].count += 1;
-      dayMap[key].amount += j.price;
+      dayMap[key].amount += fin.totalPrice;
     });
 
     return Object.values(dayMap).sort((a, b) => a.date.localeCompare(b.date));
   }, [monthlyJobs]);
-
-  const formatMonthTitle = (ym: string) => {
-    if (ym === 'all') return 'สรุปภาพรวมทั้งหมดทุกเดือน';
-    const [year, month] = ym.split('-').map(Number);
-    const thaiYear = year + 543;
-    const monthNames = [
-      'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-      'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
-    ];
-    return `เดือน ${monthNames[month - 1]} ${thaiYear}`;
-  };
 
   const handlePrint = () => {
     window.print();
@@ -198,7 +218,7 @@ export const MonthlyDashboard: React.FC<MonthlyDashboardProps> = ({ jobs }) => {
             <span>แดชบอร์ดสรุปผลรายเดือน (Monthly Performance)</span>
           </h2>
           <p className="text-xs text-slate-500">
-            วิเคราะห์ประสิทธิภาพการดำเนินงาน อัตราสำเร็จ ยอดขาย และสัดส่วนเครดิต/เงินสด
+            วิเคราะห์ประสิทธิภาพการดำเนินงาน อัตราสำเร็จ ยอดขาย และสัดส่วนเครดิต/เงินสด ({formatThaiMonthYear(selectedMonth)})
           </p>
         </div>
 
@@ -214,7 +234,7 @@ export const MonthlyDashboard: React.FC<MonthlyDashboardProps> = ({ jobs }) => {
               <option value="all">📅 แสดงข้อมูลทั้งหมด (ทุกเดือน)</option>
               {availableMonths.map((ym) => (
                 <option key={ym} value={ym}>
-                  📅 {formatMonthTitle(ym)}
+                  📅 {formatThaiMonthYear(ym)}
                 </option>
               ))}
             </select>

@@ -8,13 +8,183 @@ export const formatCurrency = (amount: number): string => {
   }).format(amount);
 };
 
+export interface ParsedDateInfo {
+  year: number;       // Gregorian/CE year (e.g. 2026)
+  thaiYear: number;   // Buddhist year (e.g. 2569)
+  month: number;      // 1-12
+  day: number;        // 1-31
+  standardDate: string; // YYYY-MM-DD
+  yearMonth: string;    // YYYY-MM
+}
+
+/**
+ * Universal Date Parser: Handles YYYY-MM-DD, DD/MM/YYYY, YYYY/MM/DD,
+ * Buddhist years (2569), ISO strings, timestamps, and Firestore date formats.
+ */
+export const parseDateParts = (dateInput: any): ParsedDateInfo | null => {
+  if (dateInput === null || dateInput === undefined || dateInput === '') return null;
+
+  // 1. Date instance
+  if (dateInput instanceof Date) {
+    if (isNaN(dateInput.getTime())) return null;
+    let y = dateInput.getFullYear();
+    if (y > 2400) y -= 543;
+    return createParsedDateInfo(y, dateInput.getMonth() + 1, dateInput.getDate());
+  }
+
+  // 2. Firestore Timestamp object ({ seconds: number })
+  if (typeof dateInput === 'object' && typeof dateInput.seconds === 'number') {
+    const dObj = new Date(dateInput.seconds * 1000);
+    if (!isNaN(dObj.getTime())) {
+      let y = dObj.getFullYear();
+      if (y > 2400) y -= 543;
+      return createParsedDateInfo(y, dObj.getMonth() + 1, dObj.getDate());
+    }
+  }
+
+  // 3. Number (ms timestamp)
+  if (typeof dateInput === 'number' && !isNaN(dateInput) && dateInput > 0) {
+    const dObj = new Date(dateInput);
+    if (!isNaN(dObj.getTime())) {
+      let y = dObj.getFullYear();
+      if (y > 2400) y -= 543;
+      return createParsedDateInfo(y, dObj.getMonth() + 1, dObj.getDate());
+    }
+  }
+
+  if (typeof dateInput !== 'string') return null;
+  const rawStr = dateInput.trim();
+  if (!rawStr) return null;
+
+  // Strip time part if present: '2026-09-10T14:30:00Z' or '2026-09-10 14:30:00'
+  const dateOnlyStr = rawStr.split('T')[0].split(' ')[0].trim();
+
+  // Check delimiter (-, /, .)
+  const delimiter = dateOnlyStr.includes('-')
+    ? '-'
+    : dateOnlyStr.includes('/')
+    ? '/'
+    : dateOnlyStr.includes('.')
+    ? '.'
+    : null;
+
+  if (delimiter) {
+    const rawParts = dateOnlyStr.split(delimiter);
+    
+    // Case YYYY-MM or MM-YYYY (2 parts)
+    if (rawParts.length === 2) {
+      const p1 = parseInt(rawParts[0].trim(), 10);
+      const p2 = parseInt(rawParts[1].trim(), 10);
+      if (!isNaN(p1) && !isNaN(p2)) {
+        let y = p1 > 1900 ? p1 : (p2 > 1900 ? p2 : 0);
+        let m = p1 > 1900 ? p2 : p1;
+        if (y > 2400) y -= 543;
+        if (y > 1900 && m >= 1 && m <= 12) {
+          return createParsedDateInfo(y, m, 1);
+        }
+      }
+    }
+
+    // Case 3 parts (Year, Month, Day in various orders)
+    if (rawParts.length >= 3) {
+      const parts = rawParts.slice(0, 3).map((p) => parseInt(p.trim(), 10));
+      if (!parts.some(isNaN)) {
+        let [p1, p2, p3] = parts;
+        let y = 0, m = 0, d = 0;
+
+        if (p1 > 1900) {
+          // YYYY-MM-DD or YYYY/MM/DD
+          y = p1;
+          m = p2;
+          d = p3;
+        } else if (p3 > 1900) {
+          // DD/MM/YYYY or MM/DD/YYYY or DD-MM-YYYY
+          y = p3;
+          if (p1 > 12) {
+            d = p1;
+            m = p2;
+          } else if (p2 > 12) {
+            m = p1;
+            d = p2;
+          } else {
+            // Standard in Thailand & ASEAN: DD/MM/YYYY
+            d = p1;
+            m = p2;
+          }
+        }
+
+        if (y > 2400) y -= 543;
+
+        if (y > 1900 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+          return createParsedDateInfo(y, m, d);
+        }
+      }
+    }
+  }
+
+  // Fallback to Javascript Date parser
+  const nativeDate = new Date(rawStr);
+  if (!isNaN(nativeDate.getTime())) {
+    let y = nativeDate.getFullYear();
+    if (y > 2400) y -= 543;
+    return createParsedDateInfo(y, nativeDate.getMonth() + 1, nativeDate.getDate());
+  }
+
+  return null;
+};
+
+const createParsedDateInfo = (year: number, month: number, day: number): ParsedDateInfo => {
+  const thaiYear = year > 2400 ? year : year + 543;
+  const standardYear = year > 2400 ? year - 543 : year;
+  const mm = month.toString().padStart(2, '0');
+  const dd = day.toString().padStart(2, '0');
+
+  return {
+    year: standardYear,
+    thaiYear,
+    month,
+    day,
+    standardDate: `${standardYear}-${mm}-${dd}`,
+    yearMonth: `${standardYear}-${mm}`,
+  };
+};
+
+export const formatThaiMonthYear = (ymOrDate: any): string => {
+  if (!ymOrDate || ymOrDate === 'all') return 'สรุปภาพรวมทั้งหมดทุกเดือน';
+
+  const monthNames = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+  ];
+
+  // Try direct regex on YYYY-MM
+  if (typeof ymOrDate === 'string') {
+    const match = ymOrDate.trim().match(/^(\d{4})[-/](\d{1,2})$/);
+    if (match) {
+      let y = parseInt(match[1], 10);
+      const m = parseInt(match[2], 10);
+      if (y > 2400) y -= 543;
+      const thaiYear = y + 543;
+      if (m >= 1 && m <= 12) {
+        return `เดือน ${monthNames[m - 1]} ${thaiYear}`;
+      }
+    }
+  }
+
+  const parsed = parseDateParts(ymOrDate);
+  if (parsed && parsed.month >= 1 && parsed.month <= 12) {
+    return `เดือน ${monthNames[parsed.month - 1]} ${parsed.thaiYear}`;
+  }
+
+  return 'เดือน ไม่ระบุ';
+};
+
 export const formatThaiDate = (dateStr: string, format: 'short' | 'full' = 'full'): string => {
   if (!dateStr) return '-';
   try {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    if (!year || !month || !day) return dateStr;
-    const thaiYear = year > 2500 ? year : year + 543;
-    
+    const parsed = parseDateParts(dateStr);
+    if (!parsed) return String(dateStr);
+
     const monthNamesShort = [
       'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
       'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
@@ -25,12 +195,12 @@ export const formatThaiDate = (dateStr: string, format: 'short' | 'full' = 'full
     ];
 
     const monthName = format === 'short' 
-      ? monthNamesShort[month - 1] 
-      : monthNamesFull[month - 1];
+      ? monthNamesShort[parsed.month - 1] 
+      : monthNamesFull[parsed.month - 1];
 
-    return `${day} ${monthName} ${thaiYear}`;
+    return `${parsed.day} ${monthName} ${parsed.thaiYear}`;
   } catch {
-    return dateStr;
+    return String(dateStr);
   }
 };
 
@@ -173,10 +343,13 @@ export const getJobTimestamp = (job: { updatedAt?: string; createdAt?: string; d
     if (!isNaN(t) && t > 0) return t;
   }
   if (job.date) {
-    const timeStr = job.time || '00:00';
-    const combined = `${job.date}T${timeStr.length === 5 ? timeStr : '00:00'}`;
-    const t = new Date(combined).getTime();
-    if (!isNaN(t) && t > 0) return t;
+    const parsed = parseDateParts(job.date);
+    if (parsed) {
+      const timeStr = job.time && job.time.length === 5 ? job.time : '00:00';
+      const combined = `${parsed.standardDate}T${timeStr}:00`;
+      const t = new Date(combined).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
     const dateOnly = new Date(job.date).getTime();
     if (!isNaN(dateOnly) && dateOnly > 0) return dateOnly;
   }
