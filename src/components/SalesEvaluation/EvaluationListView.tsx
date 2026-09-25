@@ -46,6 +46,7 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSalesRep, setSelectedSalesRep] = useState<string>('all');
+  const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
   const [selectedPriceFilter, setSelectedPriceFilter] = useState<string>('all');
 
@@ -62,26 +63,33 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
       (ev.evaluatorName && ev.evaluatorName.toLowerCase().includes(q));
 
     const matchRep = selectedSalesRep === 'all' || ev.salesRepName === selectedSalesRep;
+    const matchBranch = selectedBranch === 'all' || (ev.branch || 'ตาก') === selectedBranch;
 
+    const currentScore = ev.totalScore ?? ev.rawTotalScore ?? 30;
     const matchGrade =
       selectedGrade === 'all' ||
-      (selectedGrade === 'excellent' && ev.scoreOutOf20 >= 18) ||
-      (selectedGrade === 'good' && ev.scoreOutOf20 >= 16 && ev.scoreOutOf20 < 18) ||
-      (selectedGrade === 'average' && ev.scoreOutOf20 >= 12 && ev.scoreOutOf20 < 16) ||
-      (selectedGrade === 'poor' && ev.scoreOutOf20 < 12);
+      (selectedGrade === 'excellent' && currentScore >= 27) ||
+      (selectedGrade === 'good' && currentScore >= 24 && currentScore < 27) ||
+      (selectedGrade === 'average' && currentScore >= 18 && currentScore < 24) ||
+      (selectedGrade === 'poor' && currentScore < 18);
 
     const matchPrice =
       selectedPriceFilter === 'all' || ev.feedbackPriceAndPromo === selectedPriceFilter;
 
-    return matchQuery && matchRep && matchGrade && matchPrice;
+    return matchQuery && matchRep && matchBranch && matchGrade && matchPrice;
   });
 
-  // Calculate statistics (out of 20 points)
+  // Calculate statistics (out of 30 points)
   const totalCount = evaluations.length;
-  const avgScore20 =
+  const avgScore30 =
     totalCount > 0
       ? Number(
-          (evaluations.reduce((sum, e) => sum + (e.scoreOutOf20 || 0), 0) / totalCount).toFixed(2)
+          (
+            evaluations.reduce(
+              (sum, e) => sum + (e.totalScore ?? e.rawTotalScore ?? 30),
+              0
+            ) / totalCount
+          ).toFixed(2)
         )
       : 0;
   const avgPercentage =
@@ -89,7 +97,9 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
       ? Math.round(evaluations.reduce((sum, e) => sum + (e.percentageScore || 0), 0) / totalCount)
       : 0;
 
-  const highPerformers = evaluations.filter((e) => (e.scoreOutOf20 || 0) >= 16).length;
+  const highPerformers = evaluations.filter(
+    (e) => (e.totalScore ?? e.rawTotalScore ?? 30) >= 24
+  ).length;
   const highRate = totalCount > 0 ? Math.round((highPerformers / totalCount) * 100) : 0;
 
   return (
@@ -114,18 +124,18 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
           </div>
         </div>
 
-        {/* Card 2: Average Score out of 20 */}
+        {/* Card 2: Average Score out of 30 */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold shrink-0">
             <Star className="w-6 h-6 fill-current" />
           </div>
           <div>
             <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">
-              คะแนนเฉลี่ย (เต็ม 20)
+              คะแนนเฉลี่ย (เต็ม 30)
             </span>
             <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100">
-              {avgScore20}{' '}
-              <span className="text-xs font-normal text-slate-500">/ 20</span>
+              {avgScore30}{' '}
+              <span className="text-xs font-normal text-slate-500">/ 30</span>
             </div>
             <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
               คิดเป็น {avgPercentage}%
@@ -140,7 +150,7 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
           </div>
           <div>
             <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">
-              เกณฑ์ดีมาก-ดี (&ge;16 คะแนน)
+              เกณฑ์ดีมาก-ดี (&ge;24 คะแนน)
             </span>
             <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
               {highRate}%
@@ -232,15 +242,25 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
           </select>
 
           <select
+            value={selectedBranch}
+            onChange={(e) => setSelectedBranch(e.target.value)}
+            className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold"
+          >
+            <option value="all">🏢 สาขาทั้งหมด (ตาก & แม่สอด)</option>
+            <option value="ตาก">🏢 สาขา ตาก</option>
+            <option value="แม่สอด">🏢 สาขา แม่สอด</option>
+          </select>
+
+          <select
             value={selectedGrade}
             onChange={(e) => setSelectedGrade(e.target.value)}
             className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs"
           >
-            <option value="all">ระดับคะแนนทั้งหมด</option>
-            <option value="excellent">ดีมาก (18 - 20 คะแนน)</option>
-            <option value="good">ดี (16 - 17.9 คะแนน)</option>
-            <option value="average">ปานกลาง (12 - 15.9 คะแนน)</option>
-            <option value="poor">ควรปรับปรุง (&lt; 12 คะแนน)</option>
+            <option value="all">ระดับคะแนนทั้งหมด (เต็ม 30)</option>
+            <option value="excellent">ดีมาก (27 - 30 คะแนน)</option>
+            <option value="good">ดี (24 - 26.9 คะแนน)</option>
+            <option value="average">ปานกลาง (18 - 23.9 คะแนน)</option>
+            <option value="poor">ควรปรับปรุง (&lt; 18 คะแนน)</option>
           </select>
 
           <select
@@ -274,19 +294,52 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
 
       {/* List of Cards */}
       {filtered.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-12 text-center border border-slate-200 dark:border-slate-800 shadow-xs">
-          <Award className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-10 sm:p-12 text-center border border-slate-200 dark:border-slate-800 shadow-xs">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-3">
+            <Award className="w-8 h-8" />
+          </div>
           <h4 className="text-base font-bold text-slate-800 dark:text-slate-200">
-            ไม่พบข้อมูลแบบประเมินความพึงพอใจ
+            {evaluations.length === 0
+              ? 'ยังไม่มีข้อมูลแบบประเมินความพึงพอใจ'
+              : 'ไม่พบข้อมูลตามเงื่อนไขการค้นหา'}
           </h4>
-          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            ลองปรับเปลี่ยนคำค้นหา หรือกดปุ่ม "+ ทำแบบประเมิน" เพื่อสร้างเอกสารใหม่
+          <p className="text-xs text-slate-500 mt-1.5 max-w-md mx-auto leading-relaxed">
+            {evaluations.length === 0
+              ? 'ระบบแบบประเมินดิจิทัล 100% Paperless เริ่มต้นบันทึกแบบประเมินความพึงพอใจการทำงานของทีมขายใบแรกได้ทันที'
+              : 'ลองปรับเปลี่ยนคำค้นหา หรือล้างตัวกรองเพื่อดูข้อมูลทั้งหมด'}
           </p>
+          <div className="mt-5 flex items-center justify-center gap-2">
+            <button
+              onClick={onAddNew}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-md inline-flex items-center gap-2 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ บันทึกแบบประเมินใหม่</span>
+            </button>
+            {evaluations.length > 0 && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedSalesRep('all');
+                  setSelectedGrade('all');
+                  setSelectedPriceFilter('all');
+                }}
+                className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+              >
+                ล้างตัวกรอง
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="space-y-3">
           {filtered.map((ev) => {
-            const priceInfo = formatPriceComparisonLabel(ev.feedbackPriceAndPromo || (ev as any).overallPriceComparison);
+            const priceInfo = formatPriceComparisonLabel(
+              ev.feedbackPriceAndPromo || (ev as any)?.overallPriceComparison
+            ) || {
+              label: 'ใกล้เคียง',
+              badgeClass: 'bg-slate-100 text-slate-700 border-slate-300',
+            };
             const channelText = formatChannelText(ev.contactChannel);
 
             return (
@@ -302,12 +355,25 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
                         {ev.evaluationCode}
                       </span>
                       <span className="text-xs text-slate-400">{ev.date}</span>
+                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                        {ev.branch === 'แม่สอด' ? '🏢 สาขา แม่สอด' : '🏢 สาขา ตาก'}
+                      </span>
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                         {channelText}
                       </span>
                       {ev.jobCode && (
                         <span className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-900/50">
                           อ้างอิง: {ev.jobCode}
+                        </span>
+                      )}
+                      {ev.photos && ev.photos.length > 0 && (
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 flex items-center gap-1">
+                          📷 {ev.photos.length} รูป
+                        </span>
+                      )}
+                      {ev.checkInLocation && (
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${ev.checkInLocation.isWithinRange ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-amber-50 text-amber-700 border-amber-300'}`}>
+                          📍 {ev.checkInLocation.distanceKm} กม. ({ev.checkInLocation.isWithinRange ? 'ไม่เกิน 5 กม.' : 'เกิน 5 กม.'})
                         </span>
                       )}
                     </div>
@@ -324,14 +390,14 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-400">ผู้ให้ข้อมูล: </span>
+                        <span className="text-slate-400">ผู้ให้ข้อมูล / เบอร์ติดต่อ: </span>
                         <span className="font-medium text-slate-800 dark:text-slate-200">
-                          {ev.evaluatorName}
+                          {ev.evaluatorName || '-'}
                         </span>
                       </div>
                       <div>
                         <span className="text-slate-400">ราคาคู่แข่ง: </span>
-                        <span className={`font-semibold px-2 py-0.5 rounded text-[11px] ${priceInfo?.badgeClass || 'bg-slate-100 text-slate-700'}`}>
+                        <span className={`font-semibold px-2 py-0.5 rounded text-[11px] border ${priceInfo?.badgeClass || 'bg-slate-100 text-slate-700 border-slate-300'}`}>
                           {priceInfo?.label || 'ใกล้เคียง'}
                         </span>
                       </div>
@@ -359,15 +425,15 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
                     )}
                   </div>
 
-                  {/* Right Column: Score Badge (เต็ม 20) & Action Buttons */}
+                  {/* Right Column: Score Badge (เต็ม 30 คะแนน) & Action Buttons */}
                   <div className="flex sm:flex-col lg:flex-row items-center justify-between sm:items-end lg:items-center gap-3 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100 dark:border-slate-800">
                     <div className="text-left sm:text-right">
                       <div className="px-3.5 py-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 text-right">
                         <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase">
-                          คะแนนเต็ม 20
+                          คะแนนเต็ม 30
                         </div>
-                        <span className="text-2xl font-black">{ev.scoreOutOf20 ?? 20}</span>
-                        <span className="text-xs font-bold text-emerald-700"> / 20.00</span>
+                        <span className="text-2xl font-black">{ev.totalScore ?? ev.rawTotalScore ?? 30}</span>
+                        <span className="text-xs font-bold text-emerald-700"> / 30.00</span>
                         <span className="block text-[11px] font-extrabold text-emerald-600">
                           {ev.percentageScore ?? 100}% • {(ev.gradeLabel || 'ดีมาก').split(' ')[0]}
                         </span>

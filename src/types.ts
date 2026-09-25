@@ -172,12 +172,24 @@ export interface SalesEvaluation {
   jobCode?: string; // เช่น JOB-2026-001
   projectName?: string; // ชื่อโครงการ / หน้างาน
 
-  // ข้อมูลลูกค้าและผู้ให้ข้อมูล (ตามภาพ)
+  // ข้อมูลลูกค้าและผู้ให้ข้อมูล
   customerName: string; // ชื่อร้านค้า / ลูกค้า เช่น "จิตต์สินโฮม"
   customerPhone?: string;
-  evaluatorName: string; // ผู้ให้ข้อมูล / ผู้ลงนาม
+  evaluatorName: string; // ผู้ให้ข้อมูล / เบอร์ติดต่อ *
   salesRepName: string; // พนักงานขายที่ถูกประเมิน
-  contactChannel: 'onsite' | 'line' | 'phone'; // ช่องทางให้ข้อมูล: Onsite, Line, โทรศัพท์ (ตามภาพที่ 1)
+  branch: 'ตาก' | 'แม่สอด' | string; // สาขา: "สาขา ตาก" หรือ "สาขา แม่สอด"
+  contactChannel: 'onsite' | 'line' | 'phone'; // ช่องทางให้ข้อมูล: Onsite, Line, โทรศัพท์
+
+  // ================= ภาพถ่ายหน้างาน & การเช็คอินพิกัด (ไม่บังคับ) =================
+  photos?: string[]; // ภาพถ่ายหน้างาน (Base64 หรือ URL)
+  checkInLocation?: {
+    lat: number;
+    lng: number;
+    distanceKm?: number; // ระยะทางเทียบจุดอ้างอิงสาขา/หน้างาน (กม.)
+    isWithinRange?: boolean; // ระยะไม่เกิน 5 กิโลเมตร
+    targetName?: string; // เช่น "สาขา ตาก (ไม่เกิน 5 กม.)"
+    timestamp?: string;
+  };
 
   // ================= ส่วนที่ 1: การประเมินคะแนน =================
   // หมวดที่ 1: การสื่อสารกับลูกค้าและการบริการของเซลล์ (คะแนนเต็ม 20 คะแนน)
@@ -241,13 +253,14 @@ export interface SalesEvaluation {
   signatureName?: string; // ลายเซ็นผู้ให้ข้อมูล
 
   // ================= ผลการคำนวณคะแนน =================
-  section1Score: number; // คะแนนหมวด 1 (เต็ม 20)
-  section2Score: number; // คะแนนหมวด 2 (เต็ม 5)
-  section3Score: number; // คะแนนหมวด 3 (เต็ม 5)
-  rawTotalScore: number; // รวมคะแนนดิบ (เต็ม 30 คะแนน)
-  scoreOutOf20: number; // อัตราส่วนคะแนนเทียบเต็ม 20 คะแนน = (rawTotalScore / 30) * 20
-  percentageScore: number; // ร้อยละความพึงพอใจ = (rawTotalScore / 30) * 100
-  gradeLabel: string; // เช่น 'ดีมาก (18-20 คะแนน)', 'ดี (16-17.9 คะแนน)', 'ปานกลาง (12-15.9 คะแนน)', 'ควรปรับปรุง (<12 คะแนน)'
+  section1Score: number; // คะแนนหมวด 1: การสื่อสารและการบริการ (เต็ม 20)
+  section2Score: number; // คะแนนหมวด 2: การรับผิดชอบในหน้าที่ (เต็ม 5)
+  section3Score: number; // คะแนนหมวด 3: ความประทับใจ (เต็ม 5)
+  rawTotalScore: number; // รวมคะแนนเต็ม 30 คะแนน
+  totalScore: number; // คะแนนเต็ม 30 คะแนน = section1 + section2 + section3
+  scoreOutOf20?: number; // คะแนนเทียบเต็ม 20 (สำรอง)
+  percentageScore: number; // ร้อยละความพึงพอใจ = (totalScore / 30) * 100
+  gradeLabel: string; // เช่น 'ดีมาก (27-30 คะแนน)', 'ดี (24-26.9 คะแนน)', 'ปานกลาง (18-23.9 คะแนน)', 'ควรปรับปรุง (<18 คะแนน)'
   gradeColor: 'emerald' | 'blue' | 'amber' | 'rose';
 
   createdAt: string;

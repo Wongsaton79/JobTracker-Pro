@@ -27,6 +27,37 @@ export const DEFAULT_COMPETITOR_ITEMS: CompetitorPriceItem[] = [
   },
 ];
 
+// พิกัดสาขาเพื่อใช้ในการคำนวณระยะทาง Check-in (ไม่เกิน 5 กิโลเมตร)
+export const BRANCH_LOCATIONS: Record<string, { name: string; lat: number; lng: number; radiusKm: number }> = {
+  'ตาก': {
+    name: 'สาขา ตาก',
+    lat: 16.8837,
+    lng: 99.1258,
+    radiusKm: 5.0,
+  },
+  'แม่สอด': {
+    name: 'สาขา แม่สอด',
+    lat: 16.7167,
+    lng: 98.5667,
+    radiusKm: 5.0,
+  },
+};
+
+// ฟังก์ชันคำนวณระยะทางแบบ Haversine Formula (กิโลเมตร)
+export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // รัศมีโลกเป็นกิโลเมตร
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Number((R * c).toFixed(2));
+}
+
 export interface EvaluationScoreResults {
   // Question individual scores
   q1_1_score: number; // เต็ม 10
@@ -41,13 +72,14 @@ export interface EvaluationScoreResults {
   q3_2_score: number; // เต็ม 2.5
 
   // Section totals
-  section1Score: number; // เต็ม 20
-  section2Score: number; // เต็ม 5
-  section3Score: number; // เต็ม 5
+  section1Score: number; // เต็ม 20 คะแนน
+  section2Score: number; // เต็ม 5 คะแนน
+  section3Score: number; // เต็ม 5 คะแนน
 
-  rawTotalScore: number; // รวมดิบ (เต็ม 30)
-  scoreOutOf20: number; // อัตราส่วนคะแนนเต็ม 20 = (rawTotalScore / 30) * 20
-  percentageScore: number; // ร้อยละความพึงพอใจ
+  totalScore: number; // ⭐ คะแนนรวมเต็ม 30 คะแนน (20 + 5 + 5)
+  rawTotalScore: number; // เต็ม 30
+  scoreOutOf20?: number; // (totalScore / 30) * 20
+  percentageScore: number; // ร้อยละความพึงพอใจ = (totalScore / 30) * 100
   gradeLabel: string;
   gradeColor: 'emerald' | 'blue' | 'amber' | 'rose';
 }
@@ -92,27 +124,27 @@ export function computeEvaluationScores(input: {
   // หมวดที่ 3: เต็ม 5 คะแนน
   const section3Score = Number((q3_1_score + q3_2_score).toFixed(2));
 
-  // รวมคะแนนดิบ 3 หมวด (เต็ม 30)
-  const rawTotalScore = Number((section1Score + section2Score + section3Score).toFixed(2));
+  // รวมคะแนนเต็ม 30 คะแนน (หมวด 1: 20 + หมวด 2: 5 + หมวด 3: 5 = 30 คะแนน)
+  const totalScore = Number((section1Score + section2Score + section3Score).toFixed(2));
+  const rawTotalScore = totalScore;
+  const scoreOutOf20 = Number(((totalScore / 30) * 20).toFixed(2));
+  const percentageScore = Math.round((totalScore / 30) * 100);
 
-  // ปรับอัตราส่วนคะแนนให้คิดเป็นคะแนนเต็ม 20 คะแนน (ตามที่ผู้ใช้ระบุ: "การประเมินนี้ จะแบ่งเป็นคะแนนเต็มคือ 20 คะแนน")
-  const scoreOutOf20 = Number(((rawTotalScore / 30) * 20).toFixed(2));
-  const percentageScore = Math.round((rawTotalScore / 30) * 100);
-
-  let gradeLabel = 'ดีมาก (18.0 - 20.0 คะแนน)';
+  // ตัดเกรดตามคะแนนเต็ม 30 คะแนน
+  let gradeLabel = 'ดีมาก (27.0 - 30.0 คะแนน)';
   let gradeColor: 'emerald' | 'blue' | 'amber' | 'rose' = 'emerald';
 
-  if (scoreOutOf20 >= 18) {
-    gradeLabel = 'ดีมาก (18.0 - 20.0 คะแนน)';
+  if (totalScore >= 27) {
+    gradeLabel = 'ดีมาก (27.0 - 30.0 คะแนน)';
     gradeColor = 'emerald';
-  } else if (scoreOutOf20 >= 16) {
-    gradeLabel = 'ดี (16.0 - 17.9 คะแนน)';
+  } else if (totalScore >= 24) {
+    gradeLabel = 'ดี (24.0 - 26.9 คะแนน)';
     gradeColor = 'blue';
-  } else if (scoreOutOf20 >= 12) {
-    gradeLabel = 'ปานกลาง (12.0 - 15.9 คะแนน)';
+  } else if (totalScore >= 18) {
+    gradeLabel = 'ปานกลาง (18.0 - 23.9 คะแนน)';
     gradeColor = 'amber';
   } else {
-    gradeLabel = 'ควรปรับปรุง (< 12.0 คะแนน)';
+    gradeLabel = 'ควรปรับปรุง (< 18.0 คะแนน)';
     gradeColor = 'rose';
   }
 
@@ -128,6 +160,7 @@ export function computeEvaluationScores(input: {
     section1Score,
     section2Score,
     section3Score,
+    totalScore,
     rawTotalScore,
     scoreOutOf20,
     percentageScore,
@@ -157,33 +190,33 @@ export function formatPriceComparisonLabel(opt?: PriceComparisonOption | string 
     case 'lower':
       return {
         label: 'ต่ำกว่า',
-        badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300',
+        badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
       };
     case 'similar':
       return {
         label: 'ใกล้เคียง',
-        badgeClass: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300',
+        badgeClass: 'bg-blue-100 text-blue-800 border-blue-300',
       };
     case 'higher':
       return {
         label: 'สูงกว่า',
-        badgeClass: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300',
+        badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
       };
     case 'uncertain':
     case 'unknown':
       return {
         label: 'ไม่แน่ใจ',
-        badgeClass: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300',
+        badgeClass: 'bg-slate-100 text-slate-700 border-slate-300',
       };
     case 'undisclosed':
       return {
         label: 'ไม่สามารถเปิดเผยได้',
-        badgeClass: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300',
+        badgeClass: 'bg-purple-100 text-purple-800 border-purple-300',
       };
     default:
       return {
         label: 'ใกล้เคียง',
-        badgeClass: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300',
+        badgeClass: 'bg-slate-100 text-slate-700 border-slate-300',
       };
   }
 }
@@ -205,14 +238,14 @@ export function normalizeEvaluation(item: any): any {
       ? item.contactChannel
       : 'onsite';
 
-  let scoreOutOf20 = item.scoreOutOf20;
+  let totalScore = item.totalScore;
   let rawTotalScore = item.rawTotalScore;
   let section1Score = item.section1Score;
   let section2Score = item.section2Score;
   let section3Score = item.section3Score;
   let percentageScore = item.percentageScore;
 
-  if (scoreOutOf20 === undefined || rawTotalScore === undefined) {
+  if (totalScore === undefined || rawTotalScore === undefined) {
     if (item.q1_1_rating !== undefined) {
       const scores = computeEvaluationScores({
         q1_1_rating: item.q1_1_rating ?? 5,
@@ -224,25 +257,28 @@ export function normalizeEvaluation(item: any): any {
         q3_1_rating: item.q3_1_rating ?? 5,
         q3_2_rating: item.q3_2_rating ?? 5,
       });
-      scoreOutOf20 = scores.scoreOutOf20;
+      totalScore = scores.totalScore;
       rawTotalScore = scores.rawTotalScore;
       section1Score = scores.section1Score;
       section2Score = scores.section2Score;
       section3Score = scores.section3Score;
       percentageScore = scores.percentageScore;
     } else {
-      const legacyAvg = item.averageScore || 4.5;
-      scoreOutOf20 = Number(((legacyAvg / 5) * 20).toFixed(2));
-      rawTotalScore = Number(((legacyAvg / 5) * 30).toFixed(2));
-      section1Score = Number(((legacyAvg / 5) * 20).toFixed(2));
-      section2Score = Number(((legacyAvg / 5) * 5).toFixed(2));
-      section3Score = Number(((legacyAvg / 5) * 5).toFixed(2));
-      percentageScore = Math.round((legacyAvg / 5) * 100);
+      const legacyAvg = item.averageScore || item.scoreOutOf20 ? (item.scoreOutOf20 / 20) * 30 : 28.5;
+      totalScore = Number(legacyAvg.toFixed(2));
+      rawTotalScore = totalScore;
+      section1Score = Number(((totalScore / 30) * 20).toFixed(2));
+      section2Score = Number(((totalScore / 30) * 5).toFixed(2));
+      section3Score = Number(((totalScore / 30) * 5).toFixed(2));
+      percentageScore = Math.round((totalScore / 30) * 100);
     }
   }
 
+  const branch = item.branch === 'แม่สอด' || item.branch === 'สาขา แม่สอด' ? 'แม่สอด' : 'ตาก';
+
   return {
     ...item,
+    branch,
     contactChannel: channel,
     feedbackPriceAndPromo: feedbackPrice,
     q1_1_rating: item.q1_1_rating ?? 5,
@@ -272,13 +308,16 @@ export function normalizeEvaluation(item: any): any {
     section1Score: section1Score ?? 20,
     section2Score: section2Score ?? 5,
     section3Score: section3Score ?? 5,
+    totalScore: totalScore ?? 30,
     rawTotalScore: rawTotalScore ?? 30,
-    scoreOutOf20: scoreOutOf20 ?? 20,
+    scoreOutOf20: item.scoreOutOf20 ?? Number(((totalScore / 30) * 20).toFixed(2)),
     percentageScore: percentageScore ?? 100,
-    gradeLabel: item.gradeLabel || 'ดีมาก (18.0 - 20.0 คะแนน)',
+    gradeLabel: item.gradeLabel || (totalScore >= 27 ? 'ดีมาก (27.0 - 30.0 คะแนน)' : 'ดี (24.0 - 26.9 คะแนน)'),
     gradeColor: item.gradeColor || 'emerald',
     competitorPriceItems: item.competitorPriceItems || [],
     interestedProducts: item.interestedProducts || [],
-    additionalFeedback: item.additionalFeedback || item.strengthsFeedback || '',
+    additionalFeedback: item.additionalFeedback || '',
+    photos: item.photos || [],
+    checkInLocation: item.checkInLocation || null,
   };
 }

@@ -51,7 +51,7 @@ export async function sendEvaluationToLine(
         layout: 'vertical',
         spacing: 'md',
         contents: [
-          // Score Highlight Box (เต็ม 20 คะแนน)
+          // Score Highlight Box (เต็ม 30 คะแนน)
           {
             type: 'box',
             layout: 'horizontal',
@@ -66,20 +66,20 @@ export async function sendEvaluationToLine(
                 contents: [
                   {
                     type: 'text',
-                    text: 'คะแนนการประเมิน (เต็ม 20 คะแนน)',
+                    text: 'คะแนนการประเมิน (เต็ม 30 คะแนน)',
                     size: 'xs',
                     color: '#065f46',
                   },
                   {
                     type: 'text',
-                    text: `${evaluation.scoreOutOf20} / 20.00 (${evaluation.percentageScore}%)`,
+                    text: `${evaluation.totalScore ?? evaluation.rawTotalScore ?? 30} / 30.00 (${evaluation.percentageScore}%)`,
                     size: 'xl',
                     weight: 'bold',
                     color: '#047857',
                   },
                   {
                     type: 'text',
-                    text: `คะแนนดิบ 3 หมวด: ${evaluation.rawTotalScore} / 30 คะแนน`,
+                    text: `1. สื่อสาร ${evaluation.section1Score}/20 • 2. รับผิดชอบ ${evaluation.section2Score}/5 • 3. ประทับใจ ${evaluation.section3Score}/5`,
                     size: 'xxs',
                     color: '#059669',
                   },
@@ -138,6 +138,14 @@ export async function sendEvaluationToLine(
                 type: 'box',
                 layout: 'horizontal',
                 contents: [
+                  { type: 'text', text: 'สาขา:', size: 'xs', color: '#64748b', flex: 3 },
+                  { type: 'text', text: evaluation.branch === 'แม่สอด' ? 'สาขา แม่สอด' : 'สาขา ตาก', size: 'xs', weight: 'bold', color: '#047857', flex: 6 },
+                ],
+              },
+              {
+                type: 'box',
+                layout: 'horizontal',
+                contents: [
                   { type: 'text', text: 'พนักงานขาย:', size: 'xs', color: '#64748b', flex: 3 },
                   { type: 'text', text: evaluation.salesRepName, size: 'xs', weight: 'bold', color: '#0f172a', flex: 6 },
                 ],
@@ -148,6 +156,14 @@ export async function sendEvaluationToLine(
                 contents: [
                   { type: 'text', text: 'ร้านค้า/ลูกค้า:', size: 'xs', color: '#64748b', flex: 3 },
                   { type: 'text', text: evaluation.customerName, size: 'xs', weight: 'bold', color: '#0f172a', flex: 6, wrap: true },
+                ],
+              },
+              {
+                type: 'box',
+                layout: 'horizontal',
+                contents: [
+                  { type: 'text', text: 'ผู้ให้ข้อมูล/เบอร์:', size: 'xs', color: '#64748b', flex: 3 },
+                  { type: 'text', text: evaluation.evaluatorName || '-', size: 'xs', color: '#0f172a', flex: 6, wrap: true },
                 ],
               },
               {
@@ -166,6 +182,30 @@ export async function sendEvaluationToLine(
                   { type: 'text', text: priceInfo.label, size: 'xs', weight: 'bold', color: '#0f172a', flex: 6 },
                 ],
               },
+              evaluation.checkInLocation
+                ? {
+                    type: 'box',
+                    layout: 'horizontal',
+                    contents: [
+                      { type: 'text', text: 'Check-in:', size: 'xs', color: '#64748b', flex: 3 },
+                      {
+                        type: 'text',
+                        text: `${evaluation.checkInLocation.distanceKm} กม. (${evaluation.checkInLocation.isWithinRange ? 'ไม่เกิน 5 กม.' : 'เกิน 5 กม.'})`,
+                        size: 'xs',
+                        weight: 'bold',
+                        color: evaluation.checkInLocation.isWithinRange ? '#047857' : '#d97706',
+                        flex: 6,
+                      },
+                    ],
+                  }
+                : {
+                    type: 'box',
+                    layout: 'horizontal',
+                    contents: [
+                      { type: 'text', text: 'Check-in:', size: 'xs', color: '#64748b', flex: 3 },
+                      { type: 'text', text: 'ไม่ได้ระบุพิกัด', size: 'xs', color: '#94a3b8', flex: 6 },
+                    ],
+                  },
             ],
           },
           // Additional Feedback note
@@ -191,7 +231,7 @@ export async function sendEvaluationToLine(
         contents: [
           {
             type: 'text',
-            text: `ผู้ให้ข้อมูล: ${evaluation.evaluatorName || 'ร้านค้า'} • 100% Digital Paperless`,
+            text: `ผู้ให้ข้อมูล / เบอร์ติดต่อ: ${evaluation.evaluatorName || 'ร้านค้า'} • 100% Digital Paperless`,
             size: 'xxs',
             color: '#94a3b8',
             align: 'center',
@@ -202,7 +242,7 @@ export async function sendEvaluationToLine(
 
     const flexPayload = {
       type: 'flex',
-      altText: `⭐ ผลการประเมินทีมขาย: ${evaluation.salesRepName} (${evaluation.scoreOutOf20}/20 คะแนน)`,
+      altText: `⭐ ผลการประเมินทีมขาย: ${evaluation.salesRepName} (${evaluation.totalScore ?? evaluation.rawTotalScore ?? 30}/30 คะแนน)`,
       contents: flexBubble,
     };
 

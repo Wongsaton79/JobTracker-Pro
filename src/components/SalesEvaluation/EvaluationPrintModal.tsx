@@ -122,7 +122,7 @@ export const EvaluationPrintModal: React.FC<EvaluationPrintModalProps> = ({
             <Award className="w-5 h-5 text-amber-400" />
             <div>
               <h3 className="font-bold text-sm sm:text-base">เอกสารแบบประเมินความพึงพอใจ การทำงานของทีมขาย</h3>
-              <p className="text-xs text-slate-300">รหัสเอกสาร: {evaluation.evaluationCode} • คะแนนเต็ม 20 คะแนน</p>
+              <p className="text-xs text-slate-300">รหัสเอกสาร: {evaluation.evaluationCode} • คะแนนเต็ม 30 คะแนน</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -182,11 +182,20 @@ export const EvaluationPrintModal: React.FC<EvaluationPrintModalProps> = ({
           </div>
 
           {/* Customer & Rep Details */}
-          <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 border border-slate-300 rounded mb-4 text-[11px]">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 bg-slate-50 border border-slate-300 rounded mb-4 text-[11px]">
             <div><span className="font-semibold text-slate-600">ร้านค้า / ลูกค้า:</span> <span className="font-bold text-slate-900">{evaluation.customerName}</span></div>
-            <div><span className="font-semibold text-slate-600">พนักงานขายที่ถูกประเมิน:</span> <span className="font-bold text-blue-900">{evaluation.salesRepName}</span></div>
-            <div><span className="font-semibold text-slate-600">ผู้ให้ข้อมูล:</span> {evaluation.evaluatorName}</div>
+            <div><span className="font-semibold text-slate-600">สาขา:</span> <span className="font-bold text-emerald-800">{evaluation.branch === 'แม่สอด' ? 'สาขา แม่สอด' : 'สาขา ตาก'}</span></div>
+            <div><span className="font-semibold text-slate-600">พนักงานขาย:</span> <span className="font-bold text-blue-900">{evaluation.salesRepName}</span></div>
+            <div><span className="font-semibold text-slate-600">ผู้ให้ข้อมูล / เบอร์ติดต่อ:</span> {evaluation.evaluatorName}</div>
             <div><span className="font-semibold text-slate-600">วันที่ประเมิน:</span> {evaluation.date}</div>
+            {evaluation.checkInLocation && (
+              <div>
+                <span className="font-semibold text-slate-600">Check-in พิกัด:</span>{' '}
+                <span className={`font-bold ${evaluation.checkInLocation.isWithinRange ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {evaluation.checkInLocation.distanceKm} กม. ({evaluation.checkInLocation.isWithinRange ? 'ไม่เกิน 5 กม.' : 'เกิน 5 กม.'})
+                </span>
+              </div>
+            )}
           </div>
 
           {/* ส่วนที่ 1: ตารางข้อคำถามและคะแนน */}
@@ -252,19 +261,19 @@ export const EvaluationPrintModal: React.FC<EvaluationPrintModalProps> = ({
             </table>
           </div>
 
-          {/* สรุปคะแนน (อัตราส่วนเทียบเต็ม 20 คะแนน) */}
+          {/* สรุปคะแนน (คะแนนเต็ม 30 คะแนน) */}
           <div className="p-3 bg-emerald-50 border-2 border-emerald-400 rounded-xl mb-4 flex items-center justify-between">
             <div>
               <div className="text-xs font-bold text-emerald-950">
-                ⭐ คะแนนประเมินรวม (คิดเป็นอัตราส่วนคะแนนเต็ม 20 คะแนน):
+                ⭐ คะแนนประเมินรวมทั้ง 3 หมวด (คะแนนเต็ม 30 คะแนน):
               </div>
               <div className="text-[11px] text-emerald-800 mt-0.5">
-                คะแนนดิบ 3 หมวด: {evaluation.rawTotalScore} / 30 คะแนน • ร้อยละความพึงพอใจ: {evaluation.percentageScore}%
+                หมวด 1: {evaluation.section1Score}/20 • หมวด 2: {evaluation.section2Score}/5 • หมวด 3: {evaluation.section3Score}/5 • ร้อยละความพึงพอใจ: {evaluation.percentageScore}%
               </div>
             </div>
             <div className="text-right">
-              <span className="text-xl font-black text-emerald-700">{evaluation.scoreOutOf20}</span>
-              <span className="text-xs font-bold text-emerald-900"> / 20.00</span>
+              <span className="text-xl font-black text-emerald-700">{evaluation.totalScore ?? evaluation.rawTotalScore ?? 30}</span>
+              <span className="text-xs font-bold text-emerald-900"> / 30.00</span>
               <div className="text-[10px] font-bold text-emerald-600">{evaluation.gradeLabel}</div>
             </div>
           </div>
@@ -361,11 +370,34 @@ export const EvaluationPrintModal: React.FC<EvaluationPrintModalProps> = ({
             </div>
           </div>
 
+          {/* ภาพถ่ายหน้างาน & พิกัด GPS (ถ้ามี) */}
+          {((evaluation.photos && evaluation.photos.length > 0) || evaluation.checkInLocation) && (
+            <div className="border border-slate-300 rounded p-3 mb-4 text-[11px] bg-slate-50/50">
+              <div className="font-bold text-slate-800 mb-2 flex items-center justify-between">
+                <span>📷 ข้อมูลหน้างาน & พิกัด Check-in:</span>
+                {evaluation.checkInLocation && (
+                  <span className="text-[10px] text-slate-600">
+                    พิกัด: {evaluation.checkInLocation.lat}, {evaluation.checkInLocation.lng} • ระยะห่าง: {evaluation.checkInLocation.distanceKm} กม. ({evaluation.checkInLocation.isWithinRange ? 'อยู่ในเกณฑ์ <=5 กม.' : 'เกิน 5 กม.'})
+                  </span>
+                )}
+              </div>
+              {evaluation.photos && evaluation.photos.length > 0 && (
+                <div className="grid grid-cols-4 gap-2">
+                  {evaluation.photos.map((p, idx) => (
+                    <div key={idx} className="border border-slate-300 rounded overflow-hidden aspect-video bg-white">
+                      <img src={p} alt={`หน้างาน ${idx + 1}`} className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ส่วนลงนาม ผู้ให้ข้อมูล / ร้าน / วันที่ (มุมล่างขวา ตามภาพที่ 2) */}
           <div className="flex justify-end pt-3 text-[11px]">
             <div className="text-left space-y-1.5 min-w-[240px]">
               <div>
-                <span className="font-semibold text-slate-700">ผู้ให้ข้อมูล: </span>
+                <span className="font-semibold text-slate-700">ผู้ให้ข้อมูล / เบอร์ติดต่อ: </span>
                 <span className="font-bold text-slate-900 underline decoration-dotted">{evaluation.signatureName || evaluation.evaluatorName}</span>
               </div>
               <div>

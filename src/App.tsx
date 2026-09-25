@@ -56,7 +56,16 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((e: any) => normalizeEvaluation(e)).filter(Boolean);
+          // ล้างข้อมูลตัวอย่างเดิมตามคำขอของผู้ใช้: "ถ้าปัญหา มันเกิดจากการสร้างตัวอย่างออกมาให้เห็น งั้น ก็เอามันออกไปเลย"
+          const cleanData = parsed.filter(
+            (e: any) =>
+              e &&
+              e.id !== 'eval-2026-001' &&
+              e.id !== 'eval-2026-002' &&
+              e.id !== 'eval-2026-003' &&
+              !String(e.id || '').startsWith('eval-sample-')
+          );
+          return cleanData.map((e: any) => normalizeEvaluation(e)).filter(Boolean);
         }
       }
     } catch (e) {

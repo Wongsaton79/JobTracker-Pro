@@ -4,6 +4,8 @@ import {
   computeEvaluationScores,
   DEFAULT_COMPETITOR_ITEMS,
   formatPriceComparisonLabel,
+  calculateDistanceKm,
+  BRANCH_LOCATIONS,
 } from '../../utils/evaluationCalculator';
 import {
   Star,
@@ -18,11 +20,19 @@ import {
   Calendar,
   Layers,
   CheckCircle,
+  CheckCircle2,
   HelpCircle,
   RefreshCw,
   TrendingUp,
   DollarSign,
   MessageSquare,
+  Camera,
+  MapPin,
+  Navigation,
+  Crosshair,
+  AlertCircle,
+  Image as ImageIcon,
+  MapPinned,
 } from 'lucide-react';
 
 interface EvaluationFormProps {
@@ -48,6 +58,9 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
   const [date, setDate] = useState<string>(
     initialEvaluation?.date || new Date().toISOString().slice(0, 10)
   );
+  const [branch, setBranch] = useState<'ตาก' | 'แม่สอด'>(
+    initialEvaluation?.branch === 'แม่สอด' ? 'แม่สอด' : 'ตาก'
+  );
   const [customerName, setCustomerName] = useState<string>(
     initialEvaluation?.customerName || ''
   );
@@ -66,6 +79,14 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
   const [projectName, setProjectName] = useState<string>(
     initialEvaluation?.projectName || ''
   );
+
+  // ภาพถ่ายหน้างาน & พิกัด Check-in (ไม่บังคับ)
+  const [photos, setPhotos] = useState<string[]>(initialEvaluation?.photos || []);
+  const [checkInLocation, setCheckInLocation] = useState<SalesEvaluation['checkInLocation'] | null>(
+    initialEvaluation?.checkInLocation || null
+  );
+  const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [locationError, setLocationError] = useState<string>('');
 
   // ================= Ratings & Notes =================
   // หมวดที่ 1 (เต็ม 20)
@@ -193,6 +214,69 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
     });
   };
 
+  // Handlers for Photos & GPS Checkin
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (uploadEv) => {
+        const base64 = uploadEv.target?.result as string;
+        if (base64) {
+          setPhotos((prev) => [...prev, base64]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      alert('อุปกรณ์ของคุณไม่รองรับการระบุพิกัด GPS');
+      return;
+    }
+    setIsLocating(true);
+    setLocationError('');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const branchInfo = BRANCH_LOCATIONS[branch] || BRANCH_LOCATIONS['ตาก'];
+        const linkedJob = jobs.find((j) => j.id === selectedJobId);
+
+        // จุดอ้างอิง: ถ้างานมีพิกัด ให้เทียบกับพิกัดงาน ถ้าไม่มี ให้เทียบกับพิกัดสาขา
+        const targetLat = linkedJob?.location?.lat || branchInfo.lat;
+        const targetLng = linkedJob?.location?.lng || branchInfo.lng;
+        const targetName = linkedJob?.location?.lat
+          ? `หน้างาน [${linkedJob.jobCode}]`
+          : branchInfo.name;
+
+        const dist = calculateDistanceKm(latitude, longitude, targetLat, targetLng);
+        const isWithinRange = dist <= 5.0;
+
+        setCheckInLocation({
+          lat: Number(latitude.toFixed(6)),
+          lng: Number(longitude.toFixed(6)),
+          distanceKm: dist,
+          isWithinRange,
+          targetName: `${targetName} (เกณฑ์ไม่เกิน 5.0 กม.)`,
+          timestamp: new Date().toLocaleTimeString('th-TH'),
+        });
+        setIsLocating(false);
+      },
+      (err) => {
+        setIsLocating(false);
+        setLocationError('ไม่สามารถดึงพิกัด GPS ได้ กรุณาเปิดระบบระบุตำแหน่ง (Location) บนอุปกรณ์');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
   const handleSubmit = (sendLine: boolean = false) => {
     if (!customerName.trim()) {
       alert('กรุณากรอกชื่อร้านค้า / ลูกค้า');
@@ -203,7 +287,7 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
       return;
     }
     if (!evaluatorName.trim()) {
-      alert('กรุณากรอกชื่อผู้ให้ข้อมูล');
+      alert('กรุณากรอกผู้ให้ข้อมูล / เบอร์ติดต่อ');
       return;
     }
 
@@ -215,6 +299,7 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
         initialEvaluation?.evaluationCode ||
         `EVAL-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
       date,
+      branch,
       jobId: selectedJobId || undefined,
       jobCode: linkedJob?.jobCode,
       projectName: projectName || linkedJob?.title,
@@ -223,6 +308,10 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
       evaluatorName: evaluatorName.trim(),
       salesRepName: salesRepName.trim(),
       contactChannel,
+
+      // ภาพถ่ายหน้างาน & พิกัด Check-in (ไม่บังคับ)
+      photos,
+      checkInLocation: checkInLocation || undefined,
 
       // ส่วนที่ 1: คะแนน
       q1_1_rating,
@@ -265,10 +354,11 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
       additionalFeedback: additionalFeedback.trim(),
       signatureName: signatureName.trim() || evaluatorName.trim(),
 
-      // สรุปคะแนน
+      // สรุปคะแนน (เต็ม 30 คะแนน)
       section1Score: scoreResults.section1Score,
       section2Score: scoreResults.section2Score,
       section3Score: scoreResults.section3Score,
+      totalScore: scoreResults.totalScore,
       rawTotalScore: scoreResults.rawTotalScore,
       scoreOutOf20: scoreResults.scoreOutOf20,
       percentageScore: scoreResults.percentageScore,
@@ -360,24 +450,24 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-emerald-100 text-xs font-medium mb-2 backdrop-blur-xs">
               <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
-              <span>แบบประเมินความพึงพอใจ การทำงานของทีมขาย (คะแนนเต็ม 20 คะแนน)</span>
+              <span>แบบประเมินความพึงพอใจ การทำงานของทีมขาย (คะแนนเต็ม 30 คะแนน)</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
               {initialEvaluation ? '✏️ แก้ไขแบบประเมินทีมขาย' : '📝 บันทึกแบบประเมินความพึงพอใจ การทำงานของทีมขาย'}
             </h2>
             <p className="text-xs sm:text-sm text-emerald-100 mt-1">
-              แบบฟอร์มประเมินตามมาตรฐานบริษัท 100% Paperless แบ่งส่วนที่ 1 และส่วนที่ 2 ข้อมูลราคาคู่แข่ง
+              แบบฟอร์มประเมินตามมาตรฐานบริษัท 100% Paperless คะแนนเต็ม 30 คะแนน (หมวด 1: 20 คะแนน, หมวด 2: 5 คะแนน, หมวด 3: 5 คะแนน)
             </p>
           </div>
 
-          {/* Quick Score Live Badge (เต็ม 20 คะแนน) */}
+          {/* Quick Score Live Badge (เต็ม 30 คะแนน) */}
           <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-3 sm:p-4 text-center shrink-0 w-full sm:w-auto flex sm:flex-col items-center justify-between sm:justify-center gap-2">
             <div>
               <span className="text-[10px] uppercase tracking-wider text-emerald-200 block font-bold">
-                ⭐ คะแนนเต็ม 20 คะแนน
+                ⭐ คะแนนเต็ม 30 คะแนน
               </span>
-              <span className="text-2xl sm:text-3xl font-black text-white">{scoreResults.scoreOutOf20}</span>
-              <span className="text-xs text-emerald-100"> / 20.00</span>
+              <span className="text-2xl sm:text-3xl font-black text-white">{scoreResults.totalScore}</span>
+              <span className="text-xs text-emerald-100"> / 30.00</span>
             </div>
             <div className="px-2.5 py-1 rounded-full bg-emerald-500/90 text-white font-bold text-xs">
               {scoreResults.percentageScore}% • {scoreResults.gradeLabel.split(' ')[0]}
@@ -429,10 +519,26 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
         <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-800/40">
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-3 flex items-center gap-2">
             <User className="w-4 h-4 text-emerald-600" />
-            <span>ข้อมูลร้านค้า ลูกค้า และช่องทางให้ข้อมูล (ตามภาพที่ 1)</span>
+            <span>ข้อมูลร้านค้า ลูกค้า และช่องทางให้ข้อมูล</span>
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {/* สาขา (ตาก / แม่สอด) */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                สาขา <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={branch}
+                onChange={(e) => setBranch(e.target.value as 'ตาก' | 'แม่สอด')}
+                className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 font-bold focus:ring-2 focus:ring-emerald-500"
+                required
+              >
+                <option value="ตาก">🏢 สาขา ตาก</option>
+                <option value="แม่สอด">🏢 สาขา แม่สอด</option>
+              </select>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 ชื่อร้าน / ลูกค้า <span className="text-rose-500">*</span>
@@ -463,13 +569,13 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                ผู้ให้ข้อมูล <span className="text-rose-500">*</span>
+                ผู้ให้ข้อมูล / เบอร์ติดต่อ <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 value={evaluatorName}
                 onChange={(e) => setEvaluatorName(e.target.value)}
-                placeholder="เช่น คุณจิตต์สิน"
+                placeholder="เช่น คุณจิตต์สิน / 081-998-7766"
                 className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500"
                 required
               />
@@ -477,7 +583,7 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                ช่องทางให้ข้อมูล (ตามภาพที่ 1)
+                ช่องทางให้ข้อมูล
               </label>
               <select
                 value={contactChannel}
@@ -497,10 +603,10 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
           <div className="flex items-center justify-between border-b pb-2 border-slate-200 dark:border-slate-700">
             <h3 className="text-sm font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-              <span>ส่วนที่ 1: หัวข้อการประเมินคะแนน (คะแนนเต็ม 20 คะแนน)</span>
+              <span>ส่วนที่ 1: หัวข้อการประเมินคะแนน (คะแนนเต็ม 30 คะแนน)</span>
             </h3>
             <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-              รวมคะแนนดิบ: {scoreResults.rawTotalScore} / 30 คะแนน → แปลงเป็น {scoreResults.scoreOutOf20} / 20.00 คะแนน
+              คะแนนรวมทั้ง 3 หมวด: {scoreResults.totalScore} / 30.00 คะแนน ({scoreResults.percentageScore}%)
             </span>
           </div>
 
@@ -824,18 +930,167 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
           <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex-1">
               <label className="block text-xs font-bold text-slate-900 dark:text-slate-100 mb-1">
-                ✍️ ผู้ให้ข้อมูล / ลงนามรับรองดิจิทัล:
+                ✍️ ผู้ให้ข้อมูล / เบอร์ติดต่อ / ลงนามรับรองดิจิทัล:
               </label>
               <input
                 type="text"
                 value={signatureName}
                 onChange={(e) => setSignatureName(e.target.value)}
-                placeholder="ระบุชื่อผู้ให้ข้อมูล / ชื่อร้านค้า เช่น ร้านจิตต์สินโฮม"
+                placeholder="ระบุผู้ให้ข้อมูล / เบอร์ติดต่อ เช่น คุณจิตต์สิน / 081-998-7766"
                 className="w-full sm:max-w-md text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100"
               />
             </div>
             <div className="text-[11px] text-slate-500">
               วันที่ประเมิน: <span className="font-bold text-slate-800 dark:text-slate-200">{date}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ================= ส่วนสุดท้าย: ภาพถ่ายหน้างาน & การ Check-in ตำแหน่ง (ไม่บังคับ) ================= */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200 gap-2">
+            <div>
+              <h3 className="font-black text-sm text-slate-900 flex items-center gap-2">
+                <Camera className="w-4 h-4 text-emerald-600" />
+                <span>ภาพถ่ายหน้างาน & การ Check-in ตำแหน่ง (ไม่บังคับการลงข้อมูล)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                แนบภาพถ่ายร้านค้า/บรรยากาศ และเช็คอินพิกัด GPS หน้างานเพื่อยืนยันระยะไม่เกิน 5 กิโลเมตร
+              </p>
+            </div>
+            <span className="text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-slate-200 text-slate-700 w-fit">
+              ไม่บังคับ
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* 1. ถ่ายภาพหน้างาน / แนบรูปภาพ */}
+            <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4 text-blue-600" />
+                  <span>1. ถ่ายภาพหน้างาน / ร้านค้า ({photos.length} รูป)</span>
+                </span>
+                <label
+                  htmlFor="site-photo-upload"
+                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold border border-blue-200 cursor-pointer flex items-center gap-1.5 transition-colors"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>+ ถ่ายภาพ / แนบรูป</span>
+                </label>
+                <input
+                  id="site-photo-upload"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+              </div>
+
+              {photos.length === 0 ? (
+                <div className="py-6 border-2 border-dashed border-slate-200 rounded-xl text-center">
+                  <Camera className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
+                  <p className="text-xs text-slate-500">ยังไม่มีภาพถ่ายหน้างาน</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    กดปุ่ม "+ ถ่ายภาพ / แนบรูป" ด้านบนเพื่อถ่ายภาพหรือเลือกรูปจากเครื่อง
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {photos.map((photo, idx) => (
+                    <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-200 aspect-square bg-slate-100">
+                      <img src={photo} alt={`Site photo ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePhoto(idx)}
+                        className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-full opacity-80 hover:opacity-100 transition-opacity"
+                        title="ลบรูปนี้"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 2. Check-in ตำแหน่ง GPS หน้างาน (ระยะไม่เกิน 5 กิโลเมตร) */}
+            <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-rose-500" />
+                    <span>2. Check-in พิกัด GPS (ระยะไม่เกิน 5 กิโลเมตร)</span>
+                  </span>
+                  <span className="text-[11px] text-slate-500 block mt-0.5">
+                    จุดอ้างอิง: <strong>สาขา {branch}</strong> (เกณฑ์ระยะทางไม่เกิน 5.0 กม.)
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGetLocation}
+                  disabled={isLocating}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Crosshair className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : ''}`} />
+                  <span>{isLocating ? 'กำลังดึงพิกัด...' : '📍 เช็คอินตำแหน่ง'}</span>
+                </button>
+              </div>
+
+              {locationError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{locationError}</span>
+                </div>
+              )}
+
+              {checkInLocation ? (
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">พิกัด GPS ที่บันทึก:</span>
+                    <span className="font-mono font-bold text-slate-800">
+                      {checkInLocation.lat}, {checkInLocation.lng}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">เวลาที่เช็คอิน:</span>
+                    <span className="font-semibold text-slate-800">{checkInLocation.timestamp}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-200">
+                    <span className="text-slate-600">ระยะห่างจาก {checkInLocation.targetName}:</span>
+                    <span className="font-black text-sm text-slate-900">
+                      {checkInLocation.distanceKm} กม.
+                    </span>
+                  </div>
+
+                  {/* Range indicator status */}
+                  <div className="pt-1">
+                    {checkInLocation.isWithinRange ? (
+                      <div className="flex items-center gap-1.5 p-2 rounded-lg bg-emerald-100 text-emerald-900 font-bold border border-emerald-300">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>🟢 อยู่ในระยะที่กำหนด (ห่าง {checkInLocation.distanceKm} กม. / ไม่เกิน 5.0 กม.)</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 p-2 rounded-lg bg-amber-100 text-amber-900 font-bold border border-amber-300">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>🟠 เกินระยะ 5 กิโลเมตร (ห่าง {checkInLocation.distanceKm} กม. - บันทึกพิกัดจริงเพื่อการตรวจสอบ)</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="py-6 border-2 border-dashed border-slate-200 rounded-xl text-center">
+                  <MapPin className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
+                  <p className="text-xs text-slate-500">ยังไม่ได้ทำการเช็คอินพิกัด</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    กดปุ่ม "📍 เช็คอินตำแหน่ง" เพื่อบันทึกพิกัดจริงและตรวจระยะห่างจากสาขา
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>

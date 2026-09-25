@@ -24,12 +24,17 @@ export function exportEvaluationsToExcel(evaluations: SalesEvaluation[], company
         'ลำดับ': index + 1,
         'รหัสใบประเมิน': item.evaluationCode,
         'วันที่ประเมิน': item.date,
+        'สาขา': item.branch === 'แม่สอด' ? 'สาขา แม่สอด' : 'สาขา ตาก',
         'ชื่อร้านค้า / ลูกค้า': item.customerName,
         'เบอร์โทรศัพท์': item.customerPhone || '-',
-        'ผู้ให้ข้อมูล / ผู้ลงนาม': item.evaluatorName,
+        'ผู้ให้ข้อมูล / เบอร์ติดต่อ': item.evaluatorName,
         'พนักงานขายที่ถูกประเมิน': item.salesRepName,
         'ช่องทางให้ข้อมูล': channel,
         'โครงการ / หน้างาน': item.projectName || item.jobCode || '-',
+        'Check-in พิกัด GPS': item.checkInLocation
+          ? `${item.checkInLocation.lat}, ${item.checkInLocation.lng} (${item.checkInLocation.distanceKm} กม. - ${item.checkInLocation.isWithinRange ? 'ไม่เกิน 5 กม.' : 'เกิน 5 กม.'})`
+          : '-',
+        'จำนวนรูปถ่ายหน้างาน': item.photos?.length || 0,
 
         // หมวดที่ 1 (เต็ม 20)
         '1.1 ให้ข้อมูลสินค้า ราคา โปรโมชั่น รวดเร็ว (เต็ม 10)': item.q1_1_score,
@@ -56,9 +61,8 @@ export function exportEvaluationsToExcel(evaluations: SalesEvaluation[], company
         '3.2 หมายเหตุ': item.q3_2_note || '-',
         'รวมหมวด 3: ความประทับใจ (เต็ม 5)': item.section3Score,
 
-        // คะแนนรวม & อัตราส่วนเต็ม 20 คะแนน
-        'คะแนนรวมดิบ (เต็ม 30 คะแนน)': item.rawTotalScore,
-        '⭐ คะแนนประเมินเทียบเต็ม 20 คะแนน (คะแนนเต็ม 20)': item.scoreOutOf20,
+        // คะแนนรวมเต็ม 30 คะแนน
+        '⭐ คะแนนประเมินรวมทั้ง 3 หมวด (คะแนนเต็ม 30 คะแนน)': item.totalScore ?? item.rawTotalScore ?? 30,
         'ร้อยละความพึงพอใจ (%)': `${item.percentageScore}%`,
         'ระดับผลการประเมิน': item.gradeLabel,
 
@@ -87,31 +91,77 @@ export function exportEvaluationsToExcel(evaluations: SalesEvaluation[], company
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'แบบประเมินทีมขาย');
 
-    // 2. Summary Sheet: Average scores by sales rep out of 20
-    const salesRepMap = new Map<string, { count: number; totalScore20: number; totalRaw: number }>();
+    // 2. Summary Sheet: Average scores by sales rep (เต็ม 30 คะแนน)
+    const salesRepMap = new Map<string, { count: number; totalScore30: number; sec1: number; sec2: number; sec3: number }>();
     evaluations.forEach((ev) => {
       const rep = ev.salesRepName || 'ไม่ระบุ';
-      const existing = salesRepMap.get(rep) || { count: 0, totalScore20: 0, totalRaw: 0 };
+      const existing = salesRepMap.get(rep) || { count: 0, totalScore30: 0, sec1: 0, sec2: 0, sec3: 0 };
       existing.count += 1;
-      existing.totalScore20 += ev.scoreOutOf20;
-      existing.totalRaw += ev.rawTotalScore;
+      existing.totalScore30 += (ev.totalScore ?? ev.rawTotalScore ?? 30);
+      existing.sec1 += (ev.section1Score || 0);
+      existing.sec2 += (ev.section2Score || 0);
+      existing.sec3 += (ev.section3Score || 0);
       salesRepMap.set(rep, existing);
     });
 
-    const summaryRows = Array.from(salesRepMap.entries()).map(([rep, stat], idx) => ({
+    const repSummaryRows = Array.from(salesRepMap.entries()).map(([rep, stat], idx) => ({
       'ลำดับ': idx + 1,
       'พนักงานขาย': rep,
       'จำนวนแบบประเมิน (ใบ)': stat.count,
-      '⭐ คะแนนเฉลี่ย (เต็ม 20 คะแนน)': Number((stat.totalScore20 / stat.count).toFixed(2)),
-      'คะแนนเฉลี่ยดิบ (เต็ม 30 คะแนน)': Number((stat.totalRaw / stat.count).toFixed(2)),
-      'ร้อยละเฉลี่ย (%)': `${Math.round(((stat.totalScore20 / stat.count) / 20) * 100)}%`,
+      '⭐ คะแนนเฉลี่ย (เต็ม 30 คะแนน)': Number((stat.totalScore30 / stat.count).toFixed(2)),
+      'หมวด 1 สื่อสาร/บริการ (เต็ม 20)': Number((stat.sec1 / stat.count).toFixed(2)),
+      'หมวด 2 รับผิดชอบ (เต็ม 5)': Number((stat.sec2 / stat.count).toFixed(2)),
+      'หมวด 3 ประทับใจ (เต็ม 5)': Number((stat.sec3 / stat.count).toFixed(2)),
+      'ร้อยละความพึงพอใจเฉลี่ย (%)': `${Math.round(((stat.totalScore30 / stat.count) / 30) * 100)}%`,
     }));
 
-    const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
-    XLSX.utils.book_append_sheet(workbook, summarySheet, 'สรุปคะแนนเต็ม20รายบุคคล');
+    const repSheet = XLSX.utils.json_to_sheet(repSummaryRows);
+    XLSX.utils.book_append_sheet(workbook, repSheet, 'สรุปแยกตามพนักงาน (เต็ม30)');
+
+    // 3. Summary Sheet: By Branch (สาขา ตาก vs สาขา แม่สอด)
+    const branchMap = new Map<string, { count: number; totalScore30: number }>();
+    evaluations.forEach((ev) => {
+      const br = ev.branch === 'แม่สอด' ? 'สาขา แม่สอด' : 'สาขา ตาก';
+      const existing = branchMap.get(br) || { count: 0, totalScore30: 0 };
+      existing.count += 1;
+      existing.totalScore30 += (ev.totalScore ?? ev.rawTotalScore ?? 30);
+      branchMap.set(br, existing);
+    });
+
+    const branchSummaryRows = Array.from(branchMap.entries()).map(([br, stat], idx) => ({
+      'ลำดับ': idx + 1,
+      'สาขา': br,
+      'จำนวนแบบประเมิน (ใบ)': stat.count,
+      '⭐ คะแนนเฉลี่ย (เต็ม 30 คะแนน)': Number((stat.totalScore30 / stat.count).toFixed(2)),
+      'ร้อยละความพึงพอใจเฉลี่ย (%)': `${Math.round(((stat.totalScore30 / stat.count) / 30) * 100)}%`,
+    }));
+    const branchSheet = XLSX.utils.json_to_sheet(branchSummaryRows);
+    XLSX.utils.book_append_sheet(workbook, branchSheet, 'สรุปแยกตามสาขา');
+
+    // 4. Summary Sheet: By Customer / Store
+    const custMap = new Map<string, { count: number; totalScore30: number; rep: string; branch: string }>();
+    evaluations.forEach((ev) => {
+      const cName = ev.customerName.trim() || 'ไม่ระบุ';
+      const existing = custMap.get(cName) || { count: 0, totalScore30: 0, rep: ev.salesRepName, branch: ev.branch === 'แม่สอด' ? 'สาขา แม่สอด' : 'สาขา ตาก' };
+      existing.count += 1;
+      existing.totalScore30 += (ev.totalScore ?? ev.rawTotalScore ?? 30);
+      custMap.set(cName, existing);
+    });
+
+    const custSummaryRows = Array.from(custMap.entries()).map(([cName, stat], idx) => ({
+      'ลำดับ': idx + 1,
+      'ชื่อร้านค้า / ลูกค้า': cName,
+      'สาขา': stat.branch,
+      'พนักงานขาย': stat.rep,
+      'จำนวนแบบประเมิน (ใบ)': stat.count,
+      '⭐ คะแนนเฉลี่ย (เต็ม 30 คะแนน)': Number((stat.totalScore30 / stat.count).toFixed(2)),
+      'ร้อยละความพึงพอใจเฉลี่ย (%)': `${Math.round(((stat.totalScore30 / stat.count) / 30) * 100)}%`,
+    }));
+    const custSheet = XLSX.utils.json_to_sheet(custSummaryRows);
+    XLSX.utils.book_append_sheet(workbook, custSheet, 'สรุปแยกตามร้านค้า');
 
     const dateStr = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(workbook, `แบบประเมินความพึงพอใจทีมขาย_${dateStr}.xlsx`);
+    XLSX.writeFile(workbook, `แบบประเมินความพึงพอใจทีมขาย_30คะแนน_${dateStr}.xlsx`);
     return true;
   } catch (error) {
     console.error('Export Excel failed:', error);
