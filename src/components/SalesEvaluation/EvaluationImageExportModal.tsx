@@ -59,6 +59,17 @@ export const EvaluationImageExportModal: React.FC<EvaluationImageExportModalProp
     ? `https://www.google.com/maps?q=${evaluation.checkInLocation.lat},${evaluation.checkInLocation.lng}`
     : '';
 
+  const formatCheckInTime = (timestamp?: string | number) => {
+    if (!timestamp) return evaluation.date || '-';
+    try {
+      const d = new Date(timestamp);
+      if (isNaN(d.getTime())) return evaluation.date || '-';
+      return `${d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`;
+    } catch {
+      return evaluation.date || '-';
+    }
+  };
+
   // 1. Download as PNG image
   const handleDownloadImage = async () => {
     if (!cardRef.current) return;
@@ -394,11 +405,9 @@ export const EvaluationImageExportModal: React.FC<EvaluationImageExportModalProp
                     <span className="font-mono text-emerald-950 font-bold">
                       ละติจูด/ลองจิจูด: {evaluation.checkInLocation.lat.toFixed(6)}, {evaluation.checkInLocation.lng.toFixed(6)}
                     </span>
-                    {evaluation.checkInLocation.timestamp && (
-                      <span>
-                        เวลา Check-in: {new Date(evaluation.checkInLocation.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
-                      </span>
-                    )}
+                    <span>
+                      เวลา Check-in: {formatCheckInTime(evaluation.checkInLocation.timestamp)}
+                    </span>
                   </div>
                 </div>
               ) : (

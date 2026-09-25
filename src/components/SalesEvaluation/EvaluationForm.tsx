@@ -31,6 +31,7 @@ import {
   AlertCircle,
   Image as ImageIcon,
   MapPinned,
+  Share2,
 } from 'lucide-react';
 
 interface EvaluationFormProps {
@@ -1050,11 +1051,11 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
             <button
               type="button"
               onClick={() => handleSubmit(false, true)}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 active:scale-95 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer"
-              title="บันทึกข้อมูล พร้อมเปิดหน้าต่างรูปภาพสรุป (ไม่แสดงคะแนน) เพื่อคัดลอก/ลงโน้ตในกลุ่ม LINE ได้ทันที"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer"
+              title="บันทึกข้อมูล พร้อมเปิดหน้าต่างแชร์ลิงก์ส่งเข้ากลุ่ม LINE (สำหรับผู้บริหารดูข้อมูลและภาพถ่ายหน้างาน)"
             >
-              <ImageIcon className="w-4 h-4" />
-              <span>บันทึก & สร้างรูปภาพ LINE</span>
+              <Share2 className="w-4 h-4" />
+              <span>บันทึก & แชร์ลิงก์ LINE</span>
             </button>
 
             <button

@@ -11,6 +11,7 @@ import { AuditLogModal } from './components/AuditLogModal';
 import { INITIAL_JOBS, INITIAL_SETTINGS } from './data/initialData';
 import { JobItem, JobStatus, SyncSettings, SalesEvaluation } from './types';
 import { SalesEvaluationView } from './components/SalesEvaluation/SalesEvaluationView';
+import { ExecutiveReportPage } from './components/SalesEvaluation/ExecutiveReportPage';
 import { INITIAL_EVALUATIONS } from './data/initialEvaluations';
 import { normalizeEvaluation } from './utils/evaluationCalculator';
 import {
@@ -131,14 +132,69 @@ export default function App() {
     }
   }, [settings]);
 
-  // Save evaluations to localStorage
+  // Check if viewing standalone executive report from shared LINE link
+  const [executiveReportId, setExecutiveReportId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return (
+        params.get('report') ||
+        params.get('reportId') ||
+        (params.get('view') === 'report' ? params.get('id') : null) ||
+        params.get('evalId')
+      );
+    }
+    return null;
+  });
+
+  // Listen to popstate for URL changes
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      setExecutiveReportId(
+        params.get('report') ||
+        params.get('reportId') ||
+        (params.get('view') === 'report' ? params.get('id') : null) ||
+        params.get('evalId')
+      );
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Save evaluations to localStorage and server API for cross-device sharing (Executive Link)
   useEffect(() => {
     try {
       localStorage.setItem('sales_satisfaction_evaluations', JSON.stringify(evaluations));
     } catch (e) {
       console.warn('LocalStorage save evaluations failed:', e);
     }
+
+    // Sync to server API in background
+    if (evaluations.length > 0) {
+      fetch('/api/evaluations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ evaluations }),
+      }).catch(() => {});
+    }
   }, [evaluations]);
+
+  // Initial fetch from server API to merge evaluations from other devices
+  useEffect(() => {
+    fetch('/api/evaluations')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.success && Array.isArray(data.data) && data.data.length > 0) {
+          setEvaluations((prev) => {
+            const map = new Map();
+            data.data.forEach((e: any) => map.set(e.id, normalizeEvaluation(e)));
+            prev.forEach((e) => map.set(e.id, e));
+            return Array.from(map.values());
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToast({ message, type });
@@ -454,6 +510,33 @@ export default function App() {
     document.body.removeChild(link);
     showToast('ดาวน์โหลดไฟล์ CSV สำเร็จ!', 'success');
   };
+
+  // 🌟 If viewing standalone executive report page from shared LINE link
+  if (executiveReportId) {
+    const targetEval = evaluations.find(
+      (e) => e.id === executiveReportId || e.evaluationCode === executiveReportId
+    );
+    return (
+      <ExecutiveReportPage
+        evaluationId={executiveReportId}
+        initialEvaluation={targetEval}
+        companyName={settings.companyName}
+        onBackToMain={() => {
+          setExecutiveReportId(null);
+          if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('view');
+            url.searchParams.delete('id');
+            url.searchParams.delete('report');
+            url.searchParams.delete('reportId');
+            url.searchParams.delete('evalId');
+            window.history.pushState({}, '', url.pathname + (url.search ? url.search : ''));
+          }
+        }}
+        showToast={showToast}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 text-slate-900 font-sans selection:bg-sky-500 selection:text-white">

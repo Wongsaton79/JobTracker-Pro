@@ -570,6 +570,50 @@ app.post('/api/jobs', (req, res) => {
 });
 
 // ==========================================
+// 🌟 API ROUTE: Shared Evaluations (Supervisor Report Link & Sync)
+// ==========================================
+const EVALUATIONS_FILE = path.join(os.tmpdir(), 'jobtracker_evaluations.json');
+let sharedEvaluations: any[] = [];
+try {
+  if (fs.existsSync(EVALUATIONS_FILE)) {
+    sharedEvaluations = JSON.parse(fs.readFileSync(EVALUATIONS_FILE, 'utf-8'));
+  }
+} catch (e) {
+  console.warn('Could not read shared evaluations file:', e);
+}
+
+app.get('/api/evaluations', (req, res) => {
+  return res.json({ success: true, data: sharedEvaluations });
+});
+
+app.get('/api/evaluations/:id', (req, res) => {
+  const { id } = req.params;
+  const found = sharedEvaluations.find((e) => e.id === id || e.evaluationCode === id);
+  if (found) {
+    return res.json({ success: true, data: found });
+  }
+  return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลแบบประเมิน' });
+});
+
+app.post('/api/evaluations', (req, res) => {
+  const { evaluations, evaluation } = req.body;
+  if (Array.isArray(evaluations)) {
+    sharedEvaluations = evaluations;
+  } else if (evaluation && evaluation.id) {
+    const idx = sharedEvaluations.findIndex((e) => e.id === evaluation.id);
+    if (idx >= 0) {
+      sharedEvaluations[idx] = evaluation;
+    } else {
+      sharedEvaluations.unshift(evaluation);
+    }
+  }
+  try {
+    fs.writeFileSync(EVALUATIONS_FILE, JSON.stringify(sharedEvaluations));
+  } catch (e) {}
+  return res.json({ success: true, count: sharedEvaluations.length });
+});
+
+// ==========================================
 // 🌟 API ROUTE 1: Save Job & Notify LINE
 // ==========================================
 app.post('/api/sync/save-and-notify', async (req, res) => {

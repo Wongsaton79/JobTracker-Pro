@@ -22,6 +22,8 @@ import {
   Sparkles,
   BarChart3,
   Image as ImageIcon,
+  Share2,
+  Link as LinkIcon,
 } from 'lucide-react';
 
 interface EvaluationListViewProps {
@@ -31,6 +33,7 @@ interface EvaluationListViewProps {
   onDelete: (id: string) => void;
   onPrint: (evaluation: SalesEvaluation) => void;
   onExportImage?: (evaluation: SalesEvaluation) => void;
+  onShareLink?: (evaluation: SalesEvaluation) => void;
   onSendLine: (evaluation: SalesEvaluation) => void;
   onExportExcel: () => void;
   onViewStats: () => void;
@@ -43,6 +46,7 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
   onDelete,
   onPrint,
   onExportImage,
+  onShareLink,
   onSendLine,
   onExportExcel,
   onViewStats,
@@ -451,15 +455,26 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      {onShareLink && (
+                        <button
+                          onClick={() => onShareLink(ev)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl transition-all shadow-xs text-xs font-bold active:scale-95 cursor-pointer"
+                          title="🔗 แชร์ลิงก์หน้ารายงานเข้ากลุ่ม LINE (สำหรับผู้บริหารและหัวหน้างานดูรูปภาพและพิกัด โดยไม่แสดงคะแนน)"
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                          <span>แชร์ลิงก์ LINE</span>
+                        </button>
+                      )}
+
                       {onExportImage && (
                         <button
                           onClick={() => onExportImage(ev)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 hover:bg-purple-100 dark:hover:bg-purple-900/60 rounded-xl transition-colors border border-purple-200 dark:border-purple-800 text-xs font-semibold"
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 hover:bg-purple-100 dark:hover:bg-purple-900/60 rounded-xl transition-colors border border-purple-200 dark:border-purple-800 text-xs font-semibold cursor-pointer"
                           title="🖼️ บันทึก / แชร์เป็นรูปภาพเพื่อนำไปลงกลุ่ม LINE (ไม่แสดงคะแนน)"
                         >
                           <ImageIcon className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                          <span>รูปภาพ LINE</span>
+                          <span>รูปภาพ</span>
                         </button>
                       )}
 
