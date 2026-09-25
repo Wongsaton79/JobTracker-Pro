@@ -91,8 +91,9 @@ export interface AuditLogEntry {
     | 'change_team'
     | 'line_notify'
     | 'export_excel'
-    | 'delete_job';
-  actionLabel: string; // ข้อความสรุปสั้นๆ เช่น "บันทึกงานใหม่", "เปลี่ยนสถานะงาน", "เพิ่มรอบงาน & สินค้า"
+    | 'delete_job'
+    | 'sales_evaluation';
+  actionLabel: string; // ข้อความสรุปสั้นๆ เช่น "บันทึกงานใหม่", "เปลี่ยนสถานะงาน", "ประเมินทีมขาย"
   jobId?: string;
   jobCode?: string;
   jobTitle?: string;
@@ -143,4 +144,70 @@ export interface LineFlexMessagePayload {
   type: 'flex';
   altText: string;
   contents: any;
+}
+
+// 🏷️ รายการเปรียบเทียบราคาสินค้ากับคู่แข่ง (ไทวัสดุ, โกลบอลเฮ้าส์, ร้านค้าท้องถิ่น)
+export interface CompetitorPriceItem {
+  id: string;
+  productName: string; // เช่น "ปูนซีเมนต์ปอร์ตแลนด์", "เหล็กเส้นข้ออ้อย SD40", "สีกึ่งเงา TOA Supershield"
+  ourPrice?: number; // ราคาของบริษัท (บาท)
+  competitorPrice?: number; // ราคาคู่แข่ง (บาท)
+  comparison: 'higher' | 'similar' | 'lower' | 'unknown'; // สูงกว่า / ใกล้เคียง / ถูกกว่า / ไม่แน่ใจ
+  competitorSource?: string; // แหล่งอ้างอิง เช่น ไทวัสดุ, โกลบอลเฮ้าส์, ดูโฮม, ร้านค้าในพื้นที่
+  note?: string; // หมายเหตุเพิ่มเติม
+}
+
+// ⭐ ข้อมูลแบบประเมินความพึงพอใจ การทำงานของทีมขาย (Paperless Digital Evaluation Form)
+export interface SalesEvaluation {
+  id: string;
+  evaluationCode: string; // รหัสใบประเมิน เช่น "EVAL-2026-001"
+  date: string; // วันที่ประเมิน YYYY-MM-DD
+  jobId?: string; // รหัสงานหน้างานที่เชื่อมโยง (ถ้ามี)
+  jobCode?: string; // เช่น JOB-2026-001
+  projectName?: string; // ชื่อโครงการ / สถานที่
+  customerName: string; // ชื่อลูกค้า / ชื่อร้านค้า / บริษัทคู่ค้า
+  customerPhone?: string; // เบอร์โทรศัพท์ลูกค้า
+  customerPosition?: string; // ตำแหน่งของผู้ให้ข้อมูล (เช่น เจ้าของกิจการ, ผู้จัดการฝ่ายจัดซื้อ, โฟร์แมน)
+  evaluatorName: string; // ชื่อผู้ประเมิน / ผู้ให้คะแนน
+  salesRepName: string; // ชื่อพนักงานขาย / ทีมขายที่ถูกประเมิน
+  salesDepartment?: string; // แผนก / โซนการขาย (เช่น ทีมขายกรุงเทพฯ-ปริมณฑล, ทีมขายต่างจังหวัด)
+  contactChannel: 'visit' | 'phone' | 'line' | 'email' | 'other'; // ช่องทางการติดต่อเข้าพบ
+
+  // หมวดที่ 1: ด้านบุคลิกภาพและการให้บริการ (1-5)
+  scorePoliteness: number; // 1.1 ความสุภาพ อ่อนน้อม การแต่งกาย และกิริยามารยาท
+  scorePunctuality: number; // 1.2 ความตรงต่อเวลา และความสม่ำเสมอในการเข้าพบ/ติดตามงาน
+  scoreEnthusiasm: number; // 1.3 ความกระตือรือร้น ความใส่ใจ และความพร้อมในการให้บริการ
+
+  // หมวดที่ 2: ด้านความรู้เกี่ยวกับสินค้าและคำแนะนำ (1-5)
+  scoreProductKnowledge: number; // 2.1 ความรู้ ความเข้าใจในรายละเอียดและคุณสมบัติสินค้า
+  scoreConsultation: number; // 2.2 ความสามารถในการให้คำแนะนำ ตอบข้อซักถาม และเสนอแนะสินค้าที่ตรงความต้องการ
+  scorePromotionUpdate: number; // 2.3 การแจ้งข่าวสาร โปรโมชั่น สิทธิประโยชน์ และสินค้าใหม่ๆ
+
+  // หมวดที่ 3: ด้านความรวดเร็วและการประสานงาน (1-5)
+  scoreQuotationSpeed: number; // 3.1 ความรวดเร็วและถูกต้องในการจัดส่งใบเสนอราคา (Quotation)
+  scoreFollowUp: number; // 3.2 การติดตามสถานะคำสั่งซื้อ การจัดส่งสินค้า และการอัพเดทความคืบหน้า
+  scoreProblemSolving: number; // 3.3 การประสานงานแก้ไขปัญหาเฉพาะหน้า และบริการหลังการขาย
+
+  // หมวดที่ 4: การประเมินด้านราคาและความสามารถในการแข่งขันในตลาด
+  overallPriceComparison: 'higher' | 'similar' | 'lower' | 'unknown'; // ภาพรวมราคาเมื่อเทียบกับคู่แข่ง
+  competitorPriceItems: CompetitorPriceItem[]; // ตารางเปรียบเทียบราคาสินค้าแต่ละรายการ
+  scorePaymentTerms: number; // 4.1 ความพึงพอใจต่อเงื่อนไขการชำระเงินและเครดิตเทอม (1-5)
+
+  // หมวดที่ 5: ข้อเสนอแนะและการตัดสินใจในอนาคต
+  futurePurchaseIntent: 'continuous' | 'compare_case_by_case' | 'pause' | 'no'; // การสั่งซื้อในอนาคต
+  strengthsFeedback?: string; // จุดเด่นที่ประทับใจของทีมขาย
+  improvementFeedback?: string; // สิ่งที่ต้องการให้ปรับปรุง พัฒนา หรือสนับสนุนเพิ่มเติม
+  signatureName?: string; // ชื่อผู้ลงนามรับรอง
+
+  // ผลการคำนวณคะแนน
+  totalScore: number; // คะแนนรวม (เต็ม 50: 10 ข้อ x 5)
+  maxPossibleScore: number; // คะแนนเต็ม (50)
+  averageScore: number; // คะแนนเฉลี่ย (เต็ม 5.0)
+  percentageScore: number; // ร้อยละความพึงพอใจ (0 - 100%)
+  gradeLabel: string; // เช่น 'ยอดเยี่ยม (90-100%)', 'ดีมาก (80-89%)', 'ดี (70-79%)', 'ปานกลาง (60-69%)', 'ต้องปรับปรุง (<60%)'
+  gradeColor: 'emerald' | 'blue' | 'amber' | 'rose';
+
+  createdAt: string;
+  updatedAt: string;
+  syncStatus?: 'synced' | 'pending' | 'error';
 }

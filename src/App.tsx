@@ -9,7 +9,9 @@ import { JobDetailModal } from './components/JobDetailModal';
 import { FirebaseSettingsModal } from './components/FirebaseSettingsModal';
 import { AuditLogModal } from './components/AuditLogModal';
 import { INITIAL_JOBS, INITIAL_SETTINGS } from './data/initialData';
-import { JobItem, JobStatus, SyncSettings } from './types';
+import { JobItem, JobStatus, SyncSettings, SalesEvaluation } from './types';
+import { SalesEvaluationView } from './components/SalesEvaluation/SalesEvaluationView';
+import { INITIAL_EVALUATIONS } from './data/initialEvaluations';
 import {
   subscribeToFirebaseJobs,
   saveJobToFirebase,
@@ -29,6 +31,7 @@ import {
   RefreshCw,
   Flame,
   FileSpreadsheet,
+  Award,
 } from 'lucide-react';
 
 export default function App() {
@@ -43,6 +46,19 @@ export default function App() {
       console.warn('Failed to parse localStorage jobs:', e);
     }
     return sortJobsLatestFirst(INITIAL_JOBS);
+  });
+
+  // Load saved evaluations from localStorage or fallback to initial evaluations
+  const [evaluations, setEvaluations] = useState<SalesEvaluation[]>(() => {
+    try {
+      const saved = localStorage.getItem('sales_satisfaction_evaluations');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.warn('Failed to parse localStorage evaluations:', e);
+    }
+    return INITIAL_EVALUATIONS;
   });
 
   // Load saved settings from localStorage
@@ -69,7 +85,7 @@ export default function App() {
   });
 
   // Active view tab
-  const [activeTab, setActiveTab] = useState<'jobs' | 'dashboard' | 'map' | 'line_flex'>('jobs');
+  const [activeTab, setActiveTab] = useState<'jobs' | 'dashboard' | 'map' | 'line_flex' | 'sales_evaluation'>('jobs');
 
   // Modal states
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -102,11 +118,46 @@ export default function App() {
     }
   }, [settings]);
 
+  // Save evaluations to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('sales_satisfaction_evaluations', JSON.stringify(evaluations));
+    } catch (e) {
+      console.warn('LocalStorage save evaluations failed:', e);
+    }
+  }, [evaluations]);
+
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => {
       setToast(null);
     }, 3500);
+  };
+
+  // Evaluation state handlers
+  const handleSaveEvaluation = (savedEvaluation: SalesEvaluation) => {
+    setEvaluations((prev) => {
+      const index = prev.findIndex((e) => e.id === savedEvaluation.id);
+      if (index >= 0) {
+        const updated = [...prev];
+        updated[index] = savedEvaluation;
+        return updated;
+      }
+      return [savedEvaluation, ...prev];
+    });
+  };
+
+  const handleDeleteEvaluation = (id: string) => {
+    if (confirm('คุณต้องการลบแบบประเมินนี้ใช่หรือไม่?')) {
+      setEvaluations((prev) => prev.filter((e) => e.id !== id));
+      showToast('ลบแบบประเมินเรียบร้อยแล้ว', 'info');
+      addAuditLog({
+        userName: settings.currentUser || 'เจ้าหน้าที่ระบบ',
+        action: 'sales_evaluation',
+        actionLabel: 'ลบแบบประเมินทีมขาย',
+        details: `ลบรายการแบบประเมินรหัส ${id}`,
+      });
+    }
   };
 
   // 🔥 Firebase Real-time Listener: Live Sync across all devices
@@ -405,6 +456,7 @@ export default function App() {
         onOpenAuditLogs={() => setIsAuditModalOpen(true)}
         jobs={jobs}
         settings={settings}
+        evaluationsCount={evaluations.length}
       />
 
       {/* Main Container */}
@@ -432,6 +484,20 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Quick prominent button to open Sales Evaluation */}
+            <button
+              onClick={() => setActiveTab('sales_evaluation')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all active:scale-95 border cursor-pointer text-xs ${
+                activeTab === 'sales_evaluation'
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white border-emerald-400 ring-2 ring-emerald-400/30'
+                  : 'bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 border-emerald-600/50'
+              }`}
+              title="เปิดแบบประเมินความพึงพอใจ การทำงานของทีมขาย"
+            >
+              <Award className="w-3.5 h-3.5 text-amber-300" />
+              <span>⭐ แบบประเมินทีมขาย ({evaluations.length})</span>
+            </button>
+
             <button
               onClick={handleExportExcel}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700/80 hover:bg-emerald-600 text-white rounded-lg font-medium transition-all active:scale-95 border border-emerald-600/50 cursor-pointer shadow-xs"
@@ -493,6 +559,18 @@ export default function App() {
             allJobs={jobs}
             settings={settings}
             onSelectJob={(j) => setLinePreviewJob(j)}
+          />
+        )}
+
+        {/* Tab 5: Sales Satisfaction Evaluation (⭐ เมนูเห็นชัด: แบบประเมินความพึงพอใจ การทำงานของทีมขาย) */}
+        {activeTab === 'sales_evaluation' && (
+          <SalesEvaluationView
+            evaluations={evaluations}
+            jobs={jobs}
+            settings={settings}
+            onSaveEvaluation={handleSaveEvaluation}
+            onDeleteEvaluation={handleDeleteEvaluation}
+            showToast={showToast}
           />
         )}
       </main>
@@ -562,6 +640,10 @@ export default function App() {
         onQuickStatusChange={handleQuickStatusChange}
         onSendLinePreview={handleOpenLineFlex}
         onDirectSendLine={handleDirectSendLineFlex}
+        onOpenEvaluation={(job) => {
+          setActiveTab('sales_evaluation');
+          showToast(`เปิดแบบประเมินทีมขายสำหรับงาน "${job.title}"`, 'info');
+        }}
       />
 
       {/* Audit Log Modal */}

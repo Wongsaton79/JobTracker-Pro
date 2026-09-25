@@ -22,6 +22,7 @@ import {
   Plus,
   Navigation,
   Wallet,
+  Award,
 } from 'lucide-react';
 import { JobItem, JobPhoto, JobStatus } from '../types';
 import {
@@ -41,6 +42,7 @@ interface JobDetailModalProps {
   onQuickStatusChange: (id: string, status: JobStatus) => void;
   onSendLinePreview: (job: JobItem) => void;
   onDirectSendLine?: (job: JobItem) => void;
+  onOpenEvaluation?: (job: JobItem) => void;
 }
 
 export const JobDetailModal: React.FC<JobDetailModalProps> = ({
@@ -51,6 +53,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
   onQuickStatusChange,
   onSendLinePreview,
   onDirectSendLine,
+  onOpenEvaluation,
 }) => {
   const [selectedPhoto, setSelectedPhoto] = useState<JobPhoto | null>(null);
 
@@ -461,6 +464,21 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
               <ExternalLink className="w-3.5 h-3.5" />
               <span>ดูตัวอย่างการ์ด</span>
             </button>
+
+            {onOpenEvaluation && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenEvaluation(job);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                title="เปิดแบบประเมินความพึงพอใจการทำงานของทีมขายสำหรับงานนี้"
+              >
+                <Award className="w-3.5 h-3.5 text-amber-300" />
+                <span>ประเมินทีมขาย</span>
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

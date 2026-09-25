@@ -16,11 +16,21 @@ export const buildLineFlexMessage = (
   const paymentCfg = getPaymentTypeConfig(job.paymentType);
   const fin = calculateJobFinancials(job);
   
-  const mapUrl = `https://www.google.com/maps?q=${job.location.lat},${job.location.lng}`;
-  const phoneUri = `tel:${job.phoneNumber.replace(/[^0-9]/g, '')}`;
+  const lat = typeof job.location?.lat === 'number' ? job.location.lat : 0;
+  const lng = typeof job.location?.lng === 'number' ? job.location.lng : 0;
+  const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+  
+  const cleanPhone = (job.phoneNumber || '').replace(/[^0-9]/g, '');
+  const phoneUri = cleanPhone.length >= 3 ? `tel:${cleanPhone}` : mapUrl;
   
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const webAppUrl = origin ? `${origin}/?jobId=${encodeURIComponent(job.id || job.jobCode)}` : mapUrl;
+  const webAppUrl =
+    origin && (origin.startsWith('http://') || origin.startsWith('https://'))
+      ? `${origin}/?jobId=${encodeURIComponent(job.id || job.jobCode)}`
+      : mapUrl;
+
+  const titleText = (job.title || 'งานหน้างาน').trim();
+  const safeHeaderLabel = (headerLabel || '🔔 อัพเดทสถานะงานหน้างาน').trim();
 
   const flexJson: any = {
     type: 'bubble',
@@ -37,7 +47,7 @@ export const buildLineFlexMessage = (
           contents: [
             {
               type: 'text',
-              text: headerLabel,
+              text: safeHeaderLabel,
               weight: 'bold',
               color: '#FFFFFF',
               size: 'sm',
@@ -55,7 +65,7 @@ export const buildLineFlexMessage = (
         },
         {
           type: 'text',
-          text: job.title,
+          text: titleText,
           weight: 'bold',
           color: '#FFFFFF',
           size: 'lg',
@@ -64,7 +74,7 @@ export const buildLineFlexMessage = (
         },
         {
           type: 'text',
-          text: `รหัสงาน: ${job.jobCode} • ${formatThaiDate(job.date, 'short')} ${job.time}`,
+          text: `รหัสงาน: ${job.jobCode || '-'} • ${formatThaiDate(job.date, 'short')} ${job.time || ''}`,
           color: '#E0E7FF',
           size: 'xs',
           margin: 'xs',
@@ -91,7 +101,7 @@ export const buildLineFlexMessage = (
             },
             {
               type: 'text',
-              text: `${job.contactPerson} (${job.phoneNumber})`,
+              text: `${job.contactPerson || '-'} (${job.phoneNumber || '-'})`,
               size: 'xs',
               color: '#1E293B',
               weight: 'bold',
@@ -114,7 +124,7 @@ export const buildLineFlexMessage = (
             },
             {
               type: 'text',
-              text: `${job.productBrand} - ${job.productDetails || '-'}`,
+              text: `${job.productBrand || '-'} - ${job.productDetails || '-'}`,
               size: 'xs',
               color: '#1E293B',
               weight: 'bold',

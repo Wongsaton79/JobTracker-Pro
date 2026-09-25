@@ -10,18 +10,21 @@ import {
   Tablet,
   Monitor,
   History,
+  Award,
+  Sparkles,
 } from 'lucide-react';
 import { JobItem, SyncSettings } from '../types';
 import { formatCurrency } from '../utils/formatters';
 
 interface NavbarProps {
-  activeTab: 'jobs' | 'dashboard' | 'map' | 'line_flex';
-  onTabChange: (tab: 'jobs' | 'dashboard' | 'map' | 'line_flex') => void;
+  activeTab: 'jobs' | 'dashboard' | 'map' | 'line_flex' | 'sales_evaluation';
+  onTabChange: (tab: 'jobs' | 'dashboard' | 'map' | 'line_flex' | 'sales_evaluation') => void;
   onOpenNewJob: () => void;
   onOpenSettings: () => void;
   onOpenAuditLogs: () => void;
   jobs: JobItem[];
   settings: SyncSettings;
+  evaluationsCount?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -32,6 +35,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuditLogs,
   jobs,
   settings,
+  evaluationsCount = 0,
 }) => {
   const pendingJobsCount = jobs.filter((j) => j.status === 'in_progress' || j.status === 'pending').length;
   const totalRevenue = jobs.reduce((sum, j) => sum + j.price, 0);
@@ -66,8 +70,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Header Controls */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Prominent Quick Button: แบบประเมินทีมขาย */}
+            <button
+              onClick={() => onTabChange('sales_evaluation')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border shadow-sm cursor-pointer active:scale-95 ${
+                activeTab === 'sales_evaluation'
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white border-emerald-300 ring-2 ring-emerald-400/50 shadow-emerald-900/40'
+                  : 'bg-gradient-to-r from-emerald-700 to-teal-800 hover:from-emerald-600 hover:to-teal-700 text-white border-emerald-500/50 hover:border-emerald-400'
+              }`}
+              title="แบบประเมินความพึงพอใจ การทำงานของทีมขาย (ลดการใช้กระดาษ 100%)"
+              aria-label="แบบประเมินทีมขาย"
+            >
+              <Award className="w-4 h-4 text-amber-300 shrink-0" />
+              <span className="font-bold">⭐ แบบประเมินทีมขาย</span>
+              <span className="hidden sm:inline-block bg-white/20 text-emerald-100 text-[10px] px-1.5 py-0.5 rounded-full font-extrabold">
+                {evaluationsCount}
+              </span>
+            </button>
+
             {/* Quick Stats Pill */}
-            <div className="hidden lg:flex items-center gap-3 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700/60 text-xs">
+            <div className="hidden xl:flex items-center gap-3 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700/60 text-xs">
               <div>
                 <span className="text-slate-400 block text-[10px]">งานค้าง/กำลังทำ</span>
                 <span className="font-bold text-amber-400">{pendingJobsCount} งาน</span>
@@ -129,6 +151,23 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>📋 รายการงาน ({jobs.length})</span>
           </button>
 
+          {/* ⭐ เมนูเห็นชัด: แบบประเมินความพึงพอใจ การทำงานของทีมขาย */}
+          <button
+            onClick={() => onTabChange('sales_evaluation')}
+            className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              activeTab === 'sales_evaluation'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold shadow-md ring-2 ring-emerald-300/60'
+                : 'bg-emerald-950/40 text-emerald-300 hover:text-white hover:bg-emerald-900/60 border border-emerald-500/40 font-bold'
+            }`}
+          >
+            <Award className="w-4 h-4 text-amber-300 shrink-0" />
+            <span>⭐ แบบประเมินความพึงพอใจทีมขาย ({evaluationsCount})</span>
+            <span className="hidden sm:inline-flex items-center gap-0.5 text-[9px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-full font-black">
+              <Sparkles className="w-2.5 h-2.5" />
+              <span>ลดใช้กระดาษ</span>
+            </span>
+          </button>
+
           <button
             onClick={() => onTabChange('dashboard')}
             className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 ${
@@ -177,3 +216,4 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
+

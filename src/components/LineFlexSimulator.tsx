@@ -74,6 +74,7 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
       targetId,
       channelAccessToken: settings.lineChannelAccessToken,
       companyName: settings.companyName,
+      relayUrl: settings.lineRelayUrl,
       eventLabel: '📋 รายงานข้อมูลงานหน้างาน',
     });
 
@@ -101,6 +102,7 @@ export const LineFlexSimulator: React.FC<LineFlexSimulatorProps> = ({
       targetId,
       channelAccessToken: settings.lineChannelAccessToken,
       companyName: settings.companyName,
+      relayUrl: settings.lineRelayUrl,
       eventLabel: '📋 รายงานข้อมูลงานส่วนบุคคล',
     });
 

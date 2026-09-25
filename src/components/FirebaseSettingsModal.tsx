@@ -57,9 +57,20 @@ const CLOUDFLARE_WORKER_SNIPPET = `export default {
     try {
       const body = await request.json();
       const token = body.channelAccessToken || request.headers.get("Authorization")?.replace("Bearer ", "");
+      const rawMessages = body.messages || (body.payload ? (Array.isArray(body.payload) ? body.payload : [body.payload]) : []);
+      const normalizedMessages = rawMessages.map((m) => {
+        if (m && (m.type === "bubble" || m.type === "carousel")) {
+          return {
+            type: "flex",
+            altText: (body.eventLabel || (body.job && body.job.title) || "แจ้งเตือนงานหน้างาน").slice(0, 400),
+            contents: m,
+          };
+        }
+        return m;
+      });
       const linePayload = {
         to: body.targetId || body.to,
-        messages: body.messages || (body.payload ? [body.payload] : []),
+        messages: normalizedMessages,
       };
       const lineRes = await fetch("https://api.line.me/v2/bot/message/push", {
         method: "POST",

@@ -1,5 +1,5 @@
 import { JobItem } from '../types';
-import { buildLineFlexMessage } from './lineFlexBuilder';
+import { buildLineFlexMessage, generateLineNotifyText } from './lineFlexBuilder';
 import { ensureJobPhotosPublicUrls } from './imageCdn';
 import { saveNotificationToFirebase } from './firebaseSync';
 
@@ -64,8 +64,16 @@ export async function sendLineFlexDirect(
       };
     }
 
-    // Build the Flex message payload
-    const flexMessage = buildLineFlexMessage(processedJob, company, label);
+    // Build the Flex bubble container
+    const flexBubble = buildLineFlexMessage(processedJob, company, label);
+
+    // Build the official LINE Flex Message object (type: 'flex' with altText and contents)
+    const altText = `[${label}] ${processedJob.title || 'งานหน้างาน'} (${processedJob.jobCode || ''})`.trim();
+    const lineFlexMessage = {
+      type: 'flex' as const,
+      altText: altText.slice(0, 400),
+      contents: flexBubble,
+    };
 
     // 2. Queue in Firebase Firestore "line_notifications" collection
     // This serves as an audit trail and triggers any Firebase Cloud Functions
@@ -77,17 +85,18 @@ export async function sendLineFlexDirect(
       targetId: target,
       companyName: company,
       status: 'pending',
-      payload: flexMessage,
+      payload: lineFlexMessage,
     });
 
     const payload = {
       job: processedJob,
       targetId: target,
+      to: target,
       channelAccessToken: token,
       companyName: company,
       eventLabel: label,
-      payload: flexMessage,
-      messages: [flexMessage],
+      payload: lineFlexMessage,
+      messages: [lineFlexMessage],
       clientOrigin: typeof window !== 'undefined' ? window.location.origin : '',
     };
 
@@ -145,8 +154,42 @@ export async function sendLineFlexDirect(
           };
         }
 
+        // Check if there are details
+        let errorDetail = '';
+        if (json?.details && Array.isArray(json.details)) {
+          errorDetail = json.details.map((d: any) => `${d.property || ''}: ${d.message || ''}`).join(', ');
+        }
+        lastErrorMessage = formatLineApiError(json?.error || json?.message || errorDetail || responseText);
+
+        // Attempt automatic text fallback to guarantee message delivery to LINE
+        try {
+          const fallbackText = generateLineNotifyText(processedJob);
+          const fallbackPayload = {
+            targetId: target,
+            to: target,
+            channelAccessToken: token,
+            companyName: company,
+            messages: [{ type: 'text', text: fallbackText }],
+          };
+          const fallbackRes = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(fallbackPayload),
+          });
+          if (fallbackRes.ok) {
+            return {
+              success: true,
+              message: 'ส่งการแจ้งเตือนเข้ากลุ่ม LINE สำเร็จแล้ว (ระบบส่งแบบข้อความสรุปเนื่องจาก Flex ติดขัด)',
+              job: processedJob,
+            };
+          }
+        } catch {}
+
         if (json?.error || json?.message) {
-          lastErrorMessage = formatLineApiError(json.error || json.message);
           return {
             success: false,
             message: lastErrorMessage,
@@ -332,6 +375,11 @@ export function formatLineApiError(rawError: any): string {
   try {
     const parsed = typeof rawError === 'string' ? JSON.parse(rawError) : rawError;
     const msg = parsed?.message || parsed?.error || (typeof rawError === 'string' ? rawError : JSON.stringify(rawError));
+
+    if (parsed?.details && Array.isArray(parsed.details) && parsed.details.length > 0) {
+      const detailsStr = parsed.details.map((d: any) => `${d.property ? `${d.property}: ` : ''}${d.message || ''}`).join('; ');
+      return `LINE API แจ้งข้อมูลผิดพลาด (${detailsStr})`;
+    }
 
     if (
       msg.includes('Invalid reply token') ||

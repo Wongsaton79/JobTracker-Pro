@@ -40,7 +40,7 @@ export default {
         body.channelAccessToken ||
         body.token;
       const targetId = body.targetId || body.to;
-      const messages = body.messages || (body.payload ? (Array.isArray(body.payload) ? body.payload : [body.payload]) : null);
+      const rawMessages = body.messages || (body.payload ? (Array.isArray(body.payload) ? body.payload : [body.payload]) : []);
 
       if (!token) {
         return new Response(JSON.stringify({ success: false, error: "Missing LINE channel access token" }), {
@@ -49,9 +49,21 @@ export default {
         });
       }
 
+      // Auto-wrap bubble or carousel container into valid LINE Flex Message object if needed
+      const normalizedMessages = rawMessages.map((m) => {
+        if (m && (m.type === "bubble" || m.type === "carousel")) {
+          return {
+            type: "flex",
+            altText: (body.eventLabel || (body.job && body.job.title) || "แจ้งเตือนงานหน้างาน").slice(0, 400),
+            contents: m,
+          };
+        }
+        return m;
+      });
+
       const linePayload = {
         to: targetId,
-        messages: messages,
+        messages: normalizedMessages,
       };
 
       // Forward to LINE Messaging API
@@ -65,6 +77,31 @@ export default {
       });
 
       const resText = await lineRes.text();
+
+      // If LINE rejected the push (e.g. 400), attempt fallback text notification
+      if (!lineRes.ok && body.job) {
+        try {
+          const job = body.job;
+          const fallbackText = `🔔 [${body.eventLabel || 'แจ้งเตือนงาน'}]\n📌 งาน: ${job.title || '-'}\n📊 รหัส: ${job.jobCode || '-'}\n👤 ผู้ติดต่อ: ${job.contactPerson || '-'} (${job.phoneNumber || '-'})\n💰 ยอด: ฿${Number(job.price || 0).toLocaleString()}\n📍 สถานที่: ${(job.location && job.location.address) || '-'}`;
+          const fbRes = await fetch("https://api.line.me/v2/bot/message/push", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              to: targetId,
+              messages: [{ type: "text", text: fallbackText }],
+            }),
+          });
+          if (fbRes.ok) {
+            return new Response(JSON.stringify({ success: true, message: "ส่งการแจ้งเตือนแบบข้อความเรียบร้อยแล้ว" }), {
+              status: 200,
+              headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+            });
+          }
+        } catch (fbErr) {}
+      }
 
       return new Response(resText, {
         status: lineRes.status,
