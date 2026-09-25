@@ -55,43 +55,45 @@ export const EvaluationAnalytics: React.FC<EvaluationAnalyticsProps> = ({
     );
   }
 
-  // 1. Category averages
-  const avgService =
-    evaluations.reduce(
-      (sum, e) => sum + (e.scorePoliteness + e.scorePunctuality + e.scoreEnthusiasm) / 3,
-      0
-    ) / total;
-
-  const avgProduct =
-    evaluations.reduce(
-      (sum, e) => sum + (e.scoreProductKnowledge + e.scoreConsultation + e.scorePromotionUpdate) / 3,
-      0
-    ) / total;
-
-  const avgSpeed =
-    evaluations.reduce(
-      (sum, e) => sum + (e.scoreQuotationSpeed + e.scoreFollowUp + e.scoreProblemSolving) / 3,
-      0
-    ) / total;
-
-  const avgPayment =
-    evaluations.reduce((sum, e) => sum + (e.scorePaymentTerms || 5), 0) / total;
+  // 1. Category averages (หมวด 1 เต็ม 20, หมวด 2 เต็ม 5, หมวด 3 เต็ม 5, และคิดเป็นคะแนนเต็ม 20)
+  const avgSec1 =
+    evaluations.reduce((sum, e) => sum + (e.section1Score || 0), 0) / total;
+  const avgSec2 =
+    evaluations.reduce((sum, e) => sum + (e.section2Score || 0), 0) / total;
+  const avgSec3 =
+    evaluations.reduce((sum, e) => sum + (e.section3Score || 0), 0) / total;
+  const avgScore20 =
+    evaluations.reduce((sum, e) => sum + (e.scoreOutOf20 || 0), 0) / total;
 
   const categoryData = [
-    { name: '1. บริการ & มารยาท', score: Number(avgService.toFixed(2)), fullMark: 5 },
-    { name: '2. ความรู้สินค้า', score: Number(avgProduct.toFixed(2)), fullMark: 5 },
-    { name: '3. ความรวดเร็ว & ติดตาม', score: Number(avgSpeed.toFixed(2)), fullMark: 5 },
-    { name: '4. เงื่อนไข & เครดิต', score: Number(avgPayment.toFixed(2)), fullMark: 5 },
+    {
+      name: '1. การสื่อสาร & บริการ',
+      score: Number(avgSec1.toFixed(2)),
+      maxMark: 20,
+      pct: Math.round((avgSec1 / 20) * 100),
+    },
+    {
+      name: '2. การรับผิดชอบหน้าที่',
+      score: Number(avgSec2.toFixed(2)),
+      maxMark: 5,
+      pct: Math.round((avgSec2 / 5) * 100),
+    },
+    {
+      name: '3. ความประทับใจ',
+      score: Number(avgSec3.toFixed(2)),
+      maxMark: 5,
+      pct: Math.round((avgSec3 / 5) * 100),
+    },
   ];
 
-  // 2. Sales Rep Leaderboard
-  const repStatsMap = new Map<string, { count: number; totalScore: number; totalAvg: number }>();
+  // 2. Sales Rep Leaderboard (เต็ม 20 คะแนน)
+  const repStatsMap = new Map<string, { count: number; totalScore20: number; totalRaw: number }>();
   evaluations.forEach((ev) => {
     const rep = ev.salesRepName || 'ไม่ระบุ';
-    const curr = repStatsMap.get(rep) || { count: 0, totalScore: 0, totalAvg: 0 };
+    const curr = repStatsMap.get(rep) || { count: 0, totalScore20: 0, totalRaw: 0 };
     curr.count += 1;
-    curr.totalScore += ev.totalScore;
-    curr.totalAvg += ev.averageScore;
+    curr.totalScore20 += ev.scoreOutOf20 || 0;
+    curr.totalRaw += ev.rawTotalScore || 0;
     repStatsMap.set(rep, curr);
   });
 
@@ -99,35 +101,24 @@ export const EvaluationAnalytics: React.FC<EvaluationAnalyticsProps> = ({
     .map(([rep, st]) => ({
       name: rep,
       count: st.count,
-      avgScore: Number((st.totalAvg / st.count).toFixed(2)),
-      pct: Math.round((st.totalScore / (st.count * 50)) * 100),
+      avgScore20: Number((st.totalScore20 / st.count).toFixed(2)),
+      pct: Math.round(((st.totalScore20 / st.count) / 20) * 100),
     }))
-    .sort((a, b) => b.avgScore - a.avgScore);
+    .sort((a, b) => b.avgScore20 - a.avgScore20);
 
-  // 3. Competitor price perception distribution
-  const priceLower = evaluations.filter((e) => e.overallPriceComparison === 'lower').length;
-  const priceSimilar = evaluations.filter((e) => e.overallPriceComparison === 'similar').length;
-  const priceHigher = evaluations.filter((e) => e.overallPriceComparison === 'higher').length;
-  const priceUnknown = evaluations.filter((e) => e.overallPriceComparison === 'unknown').length;
+  // 3. Competitor price perception distribution (ส่วนที่ 2: ข้อ 1)
+  const priceLower = evaluations.filter((e) => e.feedbackPriceAndPromo === 'lower').length;
+  const priceSimilar = evaluations.filter((e) => e.feedbackPriceAndPromo === 'similar').length;
+  const priceHigher = evaluations.filter((e) => e.feedbackPriceAndPromo === 'higher').length;
+  const priceUncertain = evaluations.filter((e) => e.feedbackPriceAndPromo === 'uncertain').length;
+  const priceUndisclosed = evaluations.filter((e) => e.feedbackPriceAndPromo === 'undisclosed').length;
 
   const priceChartData = [
-    { name: 'ถูกกว่าคู่แข่ง', value: priceLower, color: '#10b981' },
-    { name: 'ใกล้เคียงคู่แข่ง', value: priceSimilar, color: '#3b82f6' },
-    { name: 'สูงกว่าคู่แข่ง', value: priceHigher, color: '#f59e0b' },
-    { name: 'ไม่แน่ใจ', value: priceUnknown, color: '#94a3b8' },
-  ].filter((d) => d.value > 0);
-
-  // 4. Intent to purchase
-  const intentContinuous = evaluations.filter((e) => e.futurePurchaseIntent === 'continuous').length;
-  const intentCompare = evaluations.filter((e) => e.futurePurchaseIntent === 'compare_case_by_case').length;
-  const intentPause = evaluations.filter((e) => e.futurePurchaseIntent === 'pause').length;
-  const intentNo = evaluations.filter((e) => e.futurePurchaseIntent === 'no').length;
-
-  const intentChartData = [
-    { name: 'สั่งซื้อต่อเนื่อง 100%', value: intentContinuous, color: '#10b981' },
-    { name: 'รอดูราคา/โปรโมชั่น', value: intentCompare, color: '#3b82f6' },
-    { name: 'ชะลอการสั่งซื้อ', value: intentPause, color: '#f59e0b' },
-    { name: 'ไม่สั่งซื้อ', value: intentNo, color: '#ef4444' },
+    { name: 'ต่ำกว่า', value: priceLower, color: '#10b981' },
+    { name: 'ใกล้เคียง', value: priceSimilar, color: '#3b82f6' },
+    { name: 'สูงกว่า', value: priceHigher, color: '#f59e0b' },
+    { name: 'ไม่แน่ใจ', value: priceUncertain, color: '#94a3b8' },
+    { name: 'ไม่สามารถเปิดเผยได้', value: priceUndisclosed, color: '#a855f7' },
   ].filter((d) => d.value > 0);
 
   return (
@@ -151,6 +142,25 @@ export const EvaluationAnalytics: React.FC<EvaluationAnalyticsProps> = ({
         </button>
       </div>
 
+      {/* KPI Overview Card */}
+      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-700 text-white p-5 rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <span className="text-xs uppercase tracking-wider text-emerald-100 font-bold block">
+            ⭐ คะแนนเฉลี่ยรวมทุกพนักงานขาย (คิดเป็นคะแนนเต็ม 20 คะแนน)
+          </span>
+          <div className="text-2xl sm:text-3xl font-black mt-1">
+            {avgScore20.toFixed(2)} <span className="text-sm font-normal text-emerald-100">/ 20.00 คะแนน</span>
+          </div>
+          <p className="text-xs text-emerald-100 mt-1">
+            คำนวณจากแบบประเมินทั้งหมด {total} ฉบับ (แปลงจากคะแนนดิบ 30 คะแนน)
+          </p>
+        </div>
+        <div className="bg-white/20 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/30 text-center">
+          <span className="text-[10px] text-emerald-100 block">ร้อยละความพึงพอใจเฉลี่ย</span>
+          <span className="text-2xl font-black">{Math.round((avgScore20 / 20) * 100)}%</span>
+        </div>
+      </div>
+
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Chart 1: Category Averages */}
@@ -159,10 +169,10 @@ export const EvaluationAnalytics: React.FC<EvaluationAnalyticsProps> = ({
             <div>
               <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-                <span>คะแนนเฉลี่ยแยกตามหมวด (เต็ม 5.0)</span>
+                <span>คะแนนเฉลี่ยแยกตาม 3 หมวด</span>
               </h3>
               <p className="text-xs text-slate-500">
-                เปรียบเทียบคะแนนความพึงพอใจในแต่ละด้านของการทำงาน
+                หมวด 1 (เต็ม 20), หมวด 2 (เต็ม 5), หมวด 3 (เต็ม 5)
               </p>
             </div>
           </div>
@@ -177,9 +187,12 @@ export const EvaluationAnalytics: React.FC<EvaluationAnalyticsProps> = ({
                   angle={-10}
                   textAnchor="end"
                 />
-                <YAxis domain={[0, 5]} tick={{ fontSize: 11, fill: '#64748b' }} />
+                <YAxis domain={[0, 20]} tick={{ fontSize: 11, fill: '#64748b' }} />
                 <Tooltip
-                  formatter={(val: any) => [`${val} / 5.0`, 'คะแนนเฉลี่ย']}
+                  formatter={(val: any, name: any, item: any) => [
+                    `${val} / ${item.payload.maxMark} คะแนน (${item.payload.pct}%)`,
+                    'คะแนนเฉลี่ย',
+                  ]}
                   contentStyle={{ borderRadius: '12px', fontSize: '12px' }}
                 />
                 <Bar dataKey="score" fill="#059669" radius={[8, 8, 0, 0]} />
@@ -188,16 +201,16 @@ export const EvaluationAnalytics: React.FC<EvaluationAnalyticsProps> = ({
           </div>
         </div>
 
-        {/* Chart 2: Competitor Price Perception */}
+        {/* Chart 2: Competitor Price Perception (ส่วนที่ 2 ข้อ 1) */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-emerald-600" />
-                <span>สัดส่วนระดับราคาเมื่อเทียบกับคู่แข่งในตลาด</span>
+                <span>ราคาสินค้า & Feedback โปรโมชั่น เทียบกับคู่แข่ง</span>
               </h3>
               <p className="text-xs text-slate-500">
-                มุมมองของลูกค้าต่อระดับราคาสินค้าเทียบกับคู่แข่ง (เช่น ไทวัสดุ, โกลบอลเฮ้าส์)
+                เกณฑ์: ต่ำกว่า, ใกล้เคียง, สูงกว่า, ไม่แน่ใจ, ไม่สามารถเปิดเผยได้ (ส่วนที่ 2 ข้อ 1)
               </p>
             </div>
           </div>
@@ -209,8 +222,8 @@ export const EvaluationAnalytics: React.FC<EvaluationAnalyticsProps> = ({
                   data={priceChartData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={85}
+                  innerRadius={55}
+                  outerRadius={80}
                   paddingAngle={4}
                   dataKey="value"
                   label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
@@ -220,7 +233,7 @@ export const EvaluationAnalytics: React.FC<EvaluationAnalyticsProps> = ({
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(val: any) => [`${val} ราย`, 'จำนวน']}
+                  formatter={(val: any) => [`${val} ร้าน`, 'จำนวน']}
                   contentStyle={{ borderRadius: '12px', fontSize: '12px' }}
                 />
               </PieChart>
@@ -229,16 +242,16 @@ export const EvaluationAnalytics: React.FC<EvaluationAnalyticsProps> = ({
         </div>
       </div>
 
-      {/* Sales Rep Leaderboard Table */}
+      {/* Sales Rep Leaderboard Table (เต็ม 20 คะแนน) */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <Users className="w-4 h-4 text-blue-600" />
-              <span>อันดับคะแนนความพึงพอใจรายพนักงานขาย (Sales Leaderboard)</span>
+              <span>อันดับคะแนนความพึงพอใจรายพนักงานขาย (เต็ม 20 คะแนน)</span>
             </h3>
             <p className="text-xs text-slate-500">
-              วัดผลงานทีมขายจากคะแนนจริงของลูกค้า เพื่อสร้างแรงจูงใจและพัฒนาการทำงาน
+              จัดอันดับตามสัดส่วนคะแนนเต็ม 20 คะแนน
             </p>
           </div>
         </div>
@@ -248,9 +261,9 @@ export const EvaluationAnalytics: React.FC<EvaluationAnalyticsProps> = ({
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
                 <th className="p-3 w-12 text-center">อันดับ</th>
-                <th className="p-3">พนักงานขาย / ทีมขาย</th>
+                <th className="p-3">พนักงานขาย / เซลล์</th>
                 <th className="p-3 text-center w-28">จำนวนแบบประเมิน</th>
-                <th className="p-3 text-right w-36">คะแนนเฉลี่ย (เต็ม 5.0)</th>
+                <th className="p-3 text-right w-36">คะแนนเฉลี่ย (เต็ม 20 คะแนน)</th>
                 <th className="p-3 text-right w-28">ร้อยละ (%)</th>
                 <th className="p-3 text-center w-36">ระดับผลงาน</th>
               </tr>
@@ -281,17 +294,23 @@ export const EvaluationAnalytics: React.FC<EvaluationAnalyticsProps> = ({
                       {item.name}
                     </td>
                     <td className="p-3 text-center text-slate-600 dark:text-slate-400">
-                      {item.count} ครั้ง
+                      {item.count} ใบ
                     </td>
                     <td className="p-3 text-right font-black text-emerald-600 dark:text-emerald-400 text-sm">
-                      {item.avgScore}
+                      {item.avgScore20} / 20.00
                     </td>
                     <td className="p-3 text-right font-bold text-slate-700 dark:text-slate-300">
                       {item.pct}%
                     </td>
                     <td className="p-3 text-center">
                       <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-                        {item.pct >= 90 ? 'ยอดเยี่ยม ⭐' : item.pct >= 80 ? 'ดีมาก 👍' : 'ดี'}
+                        {item.avgScore20 >= 18
+                          ? 'ดีมาก ⭐'
+                          : item.avgScore20 >= 16
+                          ? 'ดี 👍'
+                          : item.avgScore20 >= 12
+                          ? 'ปานกลาง'
+                          : 'ควรปรับปรุง'}
                       </span>
                     </td>
                   </tr>

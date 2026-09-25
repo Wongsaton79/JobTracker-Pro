@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { JobItem, SalesEvaluation, CompetitorPriceItem } from '../../types';
-import { computeEvaluationScores, DEFAULT_COMPETITOR_ITEMS } from '../../utils/evaluationCalculator';
+import { JobItem, SalesEvaluation, CompetitorPriceItem, PriceComparisonOption } from '../../types';
+import {
+  computeEvaluationScores,
+  DEFAULT_COMPETITOR_ITEMS,
+  formatPriceComparisonLabel,
+} from '../../utils/evaluationCalculator';
 import {
   Star,
   Plus,
@@ -50,43 +54,55 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
   const [customerPhone, setCustomerPhone] = useState<string>(
     initialEvaluation?.customerPhone || ''
   );
-  const [customerPosition, setCustomerPosition] = useState<string>(
-    initialEvaluation?.customerPosition || 'เจ้าของกิจการ / ผู้ดูแลงาน'
-  );
   const [evaluatorName, setEvaluatorName] = useState<string>(
     initialEvaluation?.evaluatorName || ''
   );
   const [salesRepName, setSalesRepName] = useState<string>(
     initialEvaluation?.salesRepName || ''
   );
-  const [salesDepartment, setSalesDepartment] = useState<string>(
-    initialEvaluation?.salesDepartment || 'ทีมงานขายและการตลาด'
-  );
-  const [contactChannel, setContactChannel] = useState<SalesEvaluation['contactChannel']>(
-    initialEvaluation?.contactChannel || 'visit'
+  const [contactChannel, setContactChannel] = useState<'onsite' | 'line' | 'phone'>(
+    initialEvaluation?.contactChannel || 'onsite'
   );
   const [projectName, setProjectName] = useState<string>(
     initialEvaluation?.projectName || ''
   );
 
-  // Scores state
-  const [scorePoliteness, setScorePoliteness] = useState<number>(initialEvaluation?.scorePoliteness ?? 5);
-  const [scorePunctuality, setScorePunctuality] = useState<number>(initialEvaluation?.scorePunctuality ?? 5);
-  const [scoreEnthusiasm, setScoreEnthusiasm] = useState<number>(initialEvaluation?.scoreEnthusiasm ?? 5);
+  // ================= Ratings & Notes =================
+  // หมวดที่ 1 (เต็ม 20)
+  const [q1_1_rating, setQ1_1_rating] = useState<number>(initialEvaluation?.q1_1_rating ?? 5);
+  const [q1_1_note, setQ1_1_note] = useState<string>(initialEvaluation?.q1_1_note || '');
 
-  const [scoreProductKnowledge, setScoreProductKnowledge] = useState<number>(initialEvaluation?.scoreProductKnowledge ?? 5);
-  const [scoreConsultation, setScoreConsultation] = useState<number>(initialEvaluation?.scoreConsultation ?? 5);
-  const [scorePromotionUpdate, setScorePromotionUpdate] = useState<number>(initialEvaluation?.scorePromotionUpdate ?? 5);
+  const [q1_2_rating, setQ1_2_rating] = useState<number>(initialEvaluation?.q1_2_rating ?? 5);
+  const [q1_2_note, setQ1_2_note] = useState<string>(initialEvaluation?.q1_2_note || '');
 
-  const [scoreQuotationSpeed, setScoreQuotationSpeed] = useState<number>(initialEvaluation?.scoreQuotationSpeed ?? 5);
-  const [scoreFollowUp, setScoreFollowUp] = useState<number>(initialEvaluation?.scoreFollowUp ?? 5);
-  const [scoreProblemSolving, setScoreProblemSolving] = useState<number>(initialEvaluation?.scoreProblemSolving ?? 5);
+  const [q1_3_rating, setQ1_3_rating] = useState<number>(initialEvaluation?.q1_3_rating ?? 5);
+  const [q1_3_note, setQ1_3_note] = useState<string>(initialEvaluation?.q1_3_note || '');
 
-  // Section 4: Price & Competitors
-  const [overallPriceComparison, setOverallPriceComparison] = useState<SalesEvaluation['overallPriceComparison']>(
-    initialEvaluation?.overallPriceComparison || 'similar'
+  const [q1_4_rating, setQ1_4_rating] = useState<number>(initialEvaluation?.q1_4_rating ?? 5);
+  const [q1_4_note, setQ1_4_note] = useState<string>(initialEvaluation?.q1_4_note || '');
+
+  // หมวดที่ 2 (เต็ม 5)
+  const [q2_1_rating, setQ2_1_rating] = useState<number>(initialEvaluation?.q2_1_rating ?? 5);
+  const [q2_1_note, setQ2_1_note] = useState<string>(initialEvaluation?.q2_1_note || '');
+
+  const [q2_2_rating, setQ2_2_rating] = useState<number>(initialEvaluation?.q2_2_rating ?? 5);
+  const [q2_2_note, setQ2_2_note] = useState<string>(initialEvaluation?.q2_2_note || '');
+
+  // หมวดที่ 3 (เต็ม 5)
+  const [q3_1_rating, setQ3_1_rating] = useState<number>(initialEvaluation?.q3_1_rating ?? 5);
+  const [q3_1_note, setQ3_1_note] = useState<string>(initialEvaluation?.q3_1_note || '');
+
+  const [q3_2_rating, setQ3_2_rating] = useState<number>(initialEvaluation?.q3_2_rating ?? 5);
+  const [q3_2_note, setQ3_2_note] = useState<string>(initialEvaluation?.q3_2_note || '');
+
+  // ================= ส่วนที่ 2 (ตามภาพที่ 2) =================
+  const [feedbackPriceAndPromo, setFeedbackPriceAndPromo] = useState<PriceComparisonOption>(
+    initialEvaluation?.feedbackPriceAndPromo || 'lower'
   );
-  const [scorePaymentTerms, setScorePaymentTerms] = useState<number>(initialEvaluation?.scorePaymentTerms ?? 5);
+  const [feedbackPriceNote, setFeedbackPriceNote] = useState<string>(
+    initialEvaluation?.feedbackPriceNote || ''
+  );
+
   const [competitorPriceItems, setCompetitorPriceItems] = useState<CompetitorPriceItem[]>(() => {
     if (initialEvaluation?.competitorPriceItems && initialEvaluation.competitorPriceItems.length > 0) {
       return initialEvaluation.competitorPriceItems;
@@ -94,21 +110,21 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
     return DEFAULT_COMPETITOR_ITEMS;
   });
 
-  // Section 5: Future & Feedback
-  const [futurePurchaseIntent, setFuturePurchaseIntent] = useState<SalesEvaluation['futurePurchaseIntent']>(
-    initialEvaluation?.futurePurchaseIntent || 'continuous'
-  );
-  const [strengthsFeedback, setStrengthsFeedback] = useState<string>(
-    initialEvaluation?.strengthsFeedback || ''
-  );
-  const [improvementFeedback, setImprovementFeedback] = useState<string>(
-    initialEvaluation?.improvementFeedback || ''
+  const [interestedProducts, setInterestedProducts] = useState<string[]>(() => {
+    if (initialEvaluation?.interestedProducts && initialEvaluation.interestedProducts.length > 0) {
+      return initialEvaluation.interestedProducts;
+    }
+    return ['', '', '', '', ''];
+  });
+
+  const [additionalFeedback, setAdditionalFeedback] = useState<string>(
+    initialEvaluation?.additionalFeedback || ''
   );
   const [signatureName, setSignatureName] = useState<string>(
     initialEvaluation?.signatureName || ''
   );
 
-  // When job selection changes, auto-fill customer info if available
+  // Link job details
   useEffect(() => {
     if (selectedJobId && !initialEvaluation) {
       const foundJob = jobs.find((j) => j.id === selectedJobId);
@@ -122,32 +138,28 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
     }
   }, [selectedJobId, jobs]);
 
-  // Compute live scores
+  // Compute live scores based on exact formula
   const scoreResults = computeEvaluationScores({
-    scorePoliteness,
-    scorePunctuality,
-    scoreEnthusiasm,
-    scoreProductKnowledge,
-    scoreConsultation,
-    scorePromotionUpdate,
-    scoreQuotationSpeed,
-    scoreFollowUp,
-    scoreProblemSolving,
-    scorePaymentTerms,
+    q1_1_rating,
+    q1_2_rating,
+    q1_3_rating,
+    q1_4_rating,
+    q2_1_rating,
+    q2_2_rating,
+    q3_1_rating,
+    q3_2_rating,
   });
 
   // Quick fill all scores to 5
   const handleQuickFillAll5 = () => {
-    setScorePoliteness(5);
-    setScorePunctuality(5);
-    setScoreEnthusiasm(5);
-    setScoreProductKnowledge(5);
-    setScoreConsultation(5);
-    setScorePromotionUpdate(5);
-    setScoreQuotationSpeed(5);
-    setScoreFollowUp(5);
-    setScoreProblemSolving(5);
-    setScorePaymentTerms(5);
+    setQ1_1_rating(5);
+    setQ1_2_rating(5);
+    setQ1_3_rating(5);
+    setQ1_4_rating(5);
+    setQ2_1_rating(5);
+    setQ2_2_rating(5);
+    setQ3_1_rating(5);
+    setQ3_2_rating(5);
   };
 
   // Add competitor item row
@@ -157,8 +169,7 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
       productName: '',
       ourPrice: undefined,
       competitorPrice: undefined,
-      comparison: 'similar',
-      competitorSource: 'ไทวัสดุ / โกลบอลเฮ้าส์',
+      comparison: 'lower',
       note: '',
     };
     setCompetitorPriceItems((prev) => [...prev, newItem]);
@@ -174,9 +185,17 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
     setCompetitorPriceItems((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const handleInterestedProductChange = (index: number, val: string) => {
+    setInterestedProducts((prev) => {
+      const copy = [...prev];
+      copy[index] = val;
+      return copy;
+    });
+  };
+
   const handleSubmit = (sendLine: boolean = false) => {
     if (!customerName.trim()) {
-      alert('กรุณากรอกชื่อลูกค้า / ร้านค้า');
+      alert('กรุณากรอกชื่อร้านค้า / ลูกค้า');
       return;
     }
     if (!salesRepName.trim()) {
@@ -184,7 +203,7 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
       return;
     }
     if (!evaluatorName.trim()) {
-      alert('กรุณากรอกชื่อผู้ประเมิน');
+      alert('กรุณากรอกชื่อผู้ให้ข้อมูล');
       return;
     }
 
@@ -192,43 +211,66 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
 
     const newEval: SalesEvaluation = {
       id: initialEvaluation?.id || `eval-${Date.now()}`,
-      evaluationCode: initialEvaluation?.evaluationCode || `EVAL-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
+      evaluationCode:
+        initialEvaluation?.evaluationCode ||
+        `EVAL-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
       date,
       jobId: selectedJobId || undefined,
       jobCode: linkedJob?.jobCode,
       projectName: projectName || linkedJob?.title,
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
-      customerPosition: customerPosition.trim(),
       evaluatorName: evaluatorName.trim(),
       salesRepName: salesRepName.trim(),
-      salesDepartment: salesDepartment.trim(),
       contactChannel,
 
-      scorePoliteness,
-      scorePunctuality,
-      scoreEnthusiasm,
+      // ส่วนที่ 1: คะแนน
+      q1_1_rating,
+      q1_1_score: scoreResults.q1_1_score,
+      q1_1_note: q1_1_note.trim(),
 
-      scoreProductKnowledge,
-      scoreConsultation,
-      scorePromotionUpdate,
+      q1_2_rating,
+      q1_2_score: scoreResults.q1_2_score,
+      q1_2_note: q1_2_note.trim(),
 
-      scoreQuotationSpeed,
-      scoreFollowUp,
-      scoreProblemSolving,
+      q1_3_rating,
+      q1_3_score: scoreResults.q1_3_score,
+      q1_3_note: q1_3_note.trim(),
 
-      overallPriceComparison,
+      q1_4_rating,
+      q1_4_score: scoreResults.q1_4_score,
+      q1_4_note: q1_4_note.trim(),
+
+      q2_1_rating,
+      q2_1_score: scoreResults.q2_1_score,
+      q2_1_note: q2_1_note.trim(),
+
+      q2_2_rating,
+      q2_2_score: scoreResults.q2_2_score,
+      q2_2_note: q2_2_note.trim(),
+
+      q3_1_rating,
+      q3_1_score: scoreResults.q3_1_score,
+      q3_1_note: q3_1_note.trim(),
+
+      q3_2_rating,
+      q3_2_score: scoreResults.q3_2_score,
+      q3_2_note: q3_2_note.trim(),
+
+      // ส่วนที่ 2: ราคาและ Feedback
+      feedbackPriceAndPromo,
+      feedbackPriceNote: feedbackPriceNote.trim(),
       competitorPriceItems: competitorPriceItems.filter((i) => i.productName.trim() !== ''),
-      scorePaymentTerms,
-
-      futurePurchaseIntent,
-      strengthsFeedback: strengthsFeedback.trim(),
-      improvementFeedback: improvementFeedback.trim(),
+      interestedProducts: interestedProducts.map((p) => p.trim()),
+      additionalFeedback: additionalFeedback.trim(),
       signatureName: signatureName.trim() || evaluatorName.trim(),
 
-      totalScore: scoreResults.totalScore,
-      maxPossibleScore: scoreResults.maxScore,
-      averageScore: scoreResults.averageScore,
+      // สรุปคะแนน
+      section1Score: scoreResults.section1Score,
+      section2Score: scoreResults.section2Score,
+      section3Score: scoreResults.section3Score,
+      rawTotalScore: scoreResults.rawTotalScore,
+      scoreOutOf20: scoreResults.scoreOutOf20,
       percentageScore: scoreResults.percentageScore,
       gradeLabel: scoreResults.gradeLabel,
       gradeColor: scoreResults.gradeColor,
@@ -241,41 +283,70 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
     onSave(newEval, sendLine);
   };
 
-  // Reusable 1-5 Rating Selector
-  const renderRatingGroup = (
-    label: string,
-    subtext: string,
-    value: number,
-    onChange: (val: number) => void
+  // Reusable Question Input Card with Rating (5, 4, 3, 2, 1, 0) + Note field
+  const renderQuestionCard = (
+    num: number,
+    code: string,
+    title: string,
+    maxScore: number,
+    rating: number,
+    onRatingChange: (val: number) => void,
+    score: number,
+    note: string,
+    onNoteChange: (val: string) => void
   ) => {
     return (
-      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60 hover:border-blue-300 transition-colors">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <div className="font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-100">{label}</div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400">{subtext}</div>
+      <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60 hover:border-emerald-300 transition-colors">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex-1">
+            <div className="flex items-start gap-2">
+              <span className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                {num}
+              </span>
+              <div>
+                <div className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-slate-100">
+                  {title}
+                </div>
+                <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-bold mt-0.5">
+                  คะแนนที่ได้: {score} / {maxScore} คะแนน (เลือกระดับ {rating})
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-1 shrink-0 self-end sm:self-center">
-            {[1, 2, 3, 4, 5].map((num) => {
-              const isSelected = value === num;
+
+          {/* Rating Buttons 5 to 1 (or 0) */}
+          <div className="flex items-center gap-1.5 self-end md:self-center shrink-0">
+            {[5, 4, 3, 2, 1, 0].map((numVal) => {
+              const isSelected = rating === numVal;
               return (
                 <button
-                  key={num}
+                  key={numVal}
                   type="button"
-                  onClick={() => onChange(num)}
+                  onClick={() => onRatingChange(numVal)}
                   className={`w-8 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
                     isSelected
-                      ? 'bg-amber-500 text-white shadow-md scale-105 ring-2 ring-amber-300'
-                      : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-amber-50 dark:hover:bg-slate-600'
+                      ? 'bg-emerald-600 text-white shadow-md scale-105 ring-2 ring-emerald-300'
+                      : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-emerald-50 dark:hover:bg-slate-600'
                   }`}
-                  title={`${num} คะแนน`}
+                  title={`ให้ระดับ ${numVal}`}
                 >
-                  <Star className={`w-3.5 h-3.5 ${isSelected ? 'fill-current' : 'text-slate-400'}`} />
-                  <span className="ml-0.5">{num}</span>
+                  <span>{numVal}</span>
                 </button>
               );
             })}
           </div>
+        </div>
+
+        {/* Note Input */}
+        <div className="mt-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-700/50 flex items-center gap-2">
+          <span className="text-[11px] text-slate-500 shrink-0">หมายเหตุ:</span>
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => onNoteChange(e.target.value)}
+            placeholder="ระบุข้อสังเกตเพิ่มเติม (ถ้ามี)"
+            className="flex-1 text-xs px-2.5 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-emerald-500"
+          />
         </div>
       </div>
     );
@@ -289,22 +360,24 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-emerald-100 text-xs font-medium mb-2 backdrop-blur-xs">
               <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
-              <span>ระบบประเมินผลออนไลน์ 100% Paperless • ลดการใช้กระดาษ</span>
+              <span>แบบประเมินความพึงพอใจ การทำงานของทีมขาย (คะแนนเต็ม 20 คะแนน)</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
-              {initialEvaluation ? '✏️ แก้ไขแบบประเมินความพึงพอใจทีมขาย' : '📝 บันทึกแบบประเมินความพึงพอใจ การทำงานของทีมขาย'}
+              {initialEvaluation ? '✏️ แก้ไขแบบประเมินทีมขาย' : '📝 บันทึกแบบประเมินความพึงพอใจ การทำงานของทีมขาย'}
             </h2>
             <p className="text-xs sm:text-sm text-emerald-100 mt-1">
-              ประเมินการบริการ ความรู้สินค้า ความรวดเร็วในการประสานงาน และวิเคราะห์ราคากับคู่แข่ง (ไทวัสดุ / โกลบอลเฮ้าส์)
+              แบบฟอร์มประเมินตามมาตรฐานบริษัท 100% Paperless แบ่งส่วนที่ 1 และส่วนที่ 2 ข้อมูลราคาคู่แข่ง
             </p>
           </div>
 
-          {/* Quick Score Live Badge */}
+          {/* Quick Score Live Badge (เต็ม 20 คะแนน) */}
           <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-3 sm:p-4 text-center shrink-0 w-full sm:w-auto flex sm:flex-col items-center justify-between sm:justify-center gap-2">
             <div>
-              <span className="text-[10px] uppercase tracking-wider text-emerald-200 block">คะแนนสด Real-time</span>
-              <span className="text-2xl sm:text-3xl font-black text-white">{scoreResults.averageScore}</span>
-              <span className="text-xs text-emerald-100"> / 5.0</span>
+              <span className="text-[10px] uppercase tracking-wider text-emerald-200 block font-bold">
+                ⭐ คะแนนเต็ม 20 คะแนน
+              </span>
+              <span className="text-2xl sm:text-3xl font-black text-white">{scoreResults.scoreOutOf20}</span>
+              <span className="text-xs text-emerald-100"> / 20.00</span>
             </div>
             <div className="px-2.5 py-1 rounded-full bg-emerald-500/90 text-white font-bold text-xs">
               {scoreResults.percentageScore}% • {scoreResults.gradeLabel.split(' ')[0]}
@@ -314,19 +387,19 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
       </div>
 
       <div className="p-4 sm:p-6 space-y-6">
-        {/* Top Controls: Link Job & 1-Click Fill 5 Stars */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 p-3.5 bg-blue-50 dark:bg-slate-800/80 rounded-xl border border-blue-200 dark:border-blue-900/50">
-          <div className="flex items-center gap-2 flex-1 w-full md:w-auto">
+        {/* Top Controls: Link Job, Rating Scale Legend & 1-Click Fill 5 Stars */}
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 p-3.5 bg-blue-50 dark:bg-slate-800/80 rounded-xl border border-blue-200 dark:border-blue-900/50">
+          <div className="flex items-center gap-2 flex-1 w-full lg:w-auto">
             <Building className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
             <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
-              ดึงข้อมูลจากหน้างาน:
+              ดึงข้อมูลหน้างาน:
             </span>
             <select
               value={selectedJobId}
               onChange={(e) => setSelectedJobId(e.target.value)}
               className="text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-blue-500 w-full md:max-w-xs text-slate-800 dark:text-slate-100"
             >
-              <option value="">-- ไม่เชื่อมโยง (กรอกข้อมูลอิสระ) --</option>
+              <option value="">-- ไม่เชื่อมโยง (กรอกอิสระ) --</option>
               {jobs.map((job) => (
                 <option key={job.id} value={job.id}>
                   [{job.jobCode}] {job.title} ({job.contactPerson})
@@ -335,34 +408,40 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
             </select>
           </div>
 
-          <button
-            type="button"
-            onClick={handleQuickFillAll5}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
-            title="กดเพื่อให้คะแนนเต็ม 5 ทุกข้อทันที เพื่อความรวดเร็วในการบันทึก"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>⚡ เติมคะแนนเต็ม 5 ทุกข้อทันที</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="text-[11px] text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+              <span className="font-bold mr-1">เกณฑ์:</span> 5=ดีมาก, 4=ดี, 3=ปานกลาง, 2=ควรปรับปรุง, 1=ไม่ผ่าน
+            </div>
+
+            <button
+              type="button"
+              onClick={handleQuickFillAll5}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
+              title="กดเพื่อให้คะแนนระดับ 5 ทุกข้อทันที"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>⚡ เติมคะแนนเต็มทุกข้อ</span>
+            </button>
+          </div>
         </div>
 
-        {/* Section: General Details */}
+        {/* General Customer / Sales Rep Info */}
         <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-800/40">
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-3 flex items-center gap-2">
             <User className="w-4 h-4 text-emerald-600" />
-            <span>1. ข้อมูลลูกค้าและพนักงานขายที่รับการประเมิน</span>
+            <span>ข้อมูลร้านค้า ลูกค้า และช่องทางให้ข้อมูล (ตามภาพที่ 1)</span>
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                ชื่อลูกค้า / ร้านค้า / โครงการ <span className="text-rose-500">*</span>
+                ชื่อร้าน / ลูกค้า <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="เช่น บจก. พัฒนาการก่อสร้าง, คุณสมชาย"
+                placeholder="เช่น ร้านจิตต์สินโฮม"
                 className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500"
                 required
               />
@@ -376,7 +455,7 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
                 type="text"
                 value={salesRepName}
                 onChange={(e) => setSalesRepName(e.target.value)}
-                placeholder="เช่น ธนากร (ทีมขายตะวันออก)"
+                placeholder="เช่น ธนากร (ทีมขาย)"
                 className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500"
                 required
               />
@@ -384,25 +463,13 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                วันที่ประเมิน
-              </label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                ชื่อผู้ประเมิน / ผู้ให้ข้อมูล <span className="text-rose-500">*</span>
+                ผู้ให้ข้อมูล <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 value={evaluatorName}
                 onChange={(e) => setEvaluatorName(e.target.value)}
-                placeholder="เช่น คุณวิเชียร (ฝ่ายจัดซื้อ)"
+                placeholder="เช่น คุณจิตต์สิน"
                 className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500"
                 required
               />
@@ -410,135 +477,193 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                เบอร์โทรศัพท์ลูกค้า
-              </label>
-              <input
-                type="tel"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="เช่น 081-234-5678"
-                className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                ช่องทางการติดต่อเข้าพบ
+                ช่องทางให้ข้อมูล (ตามภาพที่ 1)
               </label>
               <select
                 value={contactChannel}
                 onChange={(e) => setContactChannel(e.target.value as any)}
-                className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500"
+                className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 font-semibold text-emerald-800"
               >
-                <option value="visit">🚗 เข้าพบหน้าร้าน / หน้างานจริง</option>
-                <option value="phone">📞 โทรศัพท์ติดต่อ</option>
-                <option value="line">💬 LINE Official / Chat</option>
-                <option value="email">✉️ อีเมล</option>
-                <option value="other">🌐 ช่องทางอื่นๆ</option>
+                <option value="onsite">🚗 Onsite (เข้าพบหน้างานจริง)</option>
+                <option value="line">💬 Line</option>
+                <option value="phone">📞 โทรศัพท์</option>
               </select>
             </div>
           </div>
         </div>
 
-        {/* Section 2: Questions & Scores */}
+        {/* ================= ส่วนที่ 1: การประเมินคะแนน ================= */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <div className="flex items-center justify-between border-b pb-2 border-slate-200 dark:border-slate-700">
+            <h3 className="text-sm font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-              <span>2. หัวข้อการประเมินความพึงพอใจ (เกณฑ์ 1 - 5 คะแนน)</span>
+              <span>ส่วนที่ 1: หัวข้อการประเมินคะแนน (คะแนนเต็ม 20 คะแนน)</span>
             </h3>
-            <span className="text-xs text-slate-500">
-              5=มากที่สุด, 4=มาก, 3=ปานกลาง, 2=น้อย, 1=น้อยที่สุด
+            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+              รวมคะแนนดิบ: {scoreResults.rawTotalScore} / 30 คะแนน → แปลงเป็น {scoreResults.scoreOutOf20} / 20.00 คะแนน
             </span>
           </div>
 
-          {/* Group 1: ด้านบุคลิกภาพและการให้บริการ */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40 px-3 py-1.5 rounded-lg border border-sky-200 dark:border-sky-800/50">
-              หมวดที่ 1: ด้านบุคลิกภาพและการให้บริการ (Service & Personality)
-            </h4>
-            {renderRatingGroup(
-              '1.1 ความสุภาพ อ่อนน้อม การแต่งกาย และกิริยามารยาทในการติดต่อประสานงาน',
-              'พนักงานแต่งกายสุภาพ เรียบร้อย พูดจาไพเราะ และให้เกียรติลูกค้า',
-              scorePoliteness,
-              setScorePoliteness
+          {/* หมวดที่ 1: การสื่อสารกับลูกค้าและการบริการของเซลล์ (คะแนนเต็ม 20 คะแนน) */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between bg-sky-100 dark:bg-sky-950/60 px-3.5 py-2 rounded-xl border border-sky-300 dark:border-sky-800">
+              <span className="text-xs font-black text-sky-900 dark:text-sky-200">
+                หมวดที่ 1: การสื่อสารกับลูกค้าและการบริการของเซลล์ (คะแนนเต็ม 20 คะแนน)
+              </span>
+              <span className="text-xs font-extrabold text-sky-800 dark:text-sky-300 bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-md">
+                รวมหมวด 1: {scoreResults.section1Score} / 20 คะแนน
+              </span>
+            </div>
+
+            {renderQuestionCard(
+              1,
+              '1.1',
+              'เซลล์ให้ข้อมูลสินค้า ราคา และโปรโมชั่น แจ้งกิจกรรม แคมเปญได้ชัดเจน ถูกต้องและรวดเร็ว (คะแนนเต็ม 10 คะแนน)',
+              10,
+              q1_1_rating,
+              setQ1_1_rating,
+              scoreResults.q1_1_score,
+              q1_1_note,
+              setQ1_1_note
             )}
-            {renderRatingGroup(
-              '1.2 ความตรงต่อเวลานัดหมาย และความสม่ำเสมอในการเข้าพบ/ติดตามงาน',
-              'มาถึงหน้างานตรงเวลา มีการแจ้งล่วงหน้า และติดตามงานอย่างสม่ำเสมอ',
-              scorePunctuality,
-              setScorePunctuality
+
+            {renderQuestionCard(
+              2,
+              '1.2',
+              'เซลล์มีความเอาใจใส่ ติดตามงาน เข้าเยี่ยมและติดตามการขายกับลูกค้าอย่างต่อเนื่อง (คะแนนเต็ม 5 คะแนน)',
+              5,
+              q1_2_rating,
+              setQ1_2_rating,
+              scoreResults.q1_2_score,
+              q1_2_note,
+              setQ1_2_note
             )}
-            {renderRatingGroup(
-              '1.3 ความกระตือรือร้น ความใส่ใจ และความพร้อมในการให้บริการด้วยความเต็มใจ',
-              'มีความกระตือรือร้น สนใจรับฟัง และพร้อมช่วยเหลืออย่างจริงใจ',
-              scoreEnthusiasm,
-              setScoreEnthusiasm
+
+            {renderQuestionCard(
+              3,
+              '1.3',
+              'เซลล์ผลักดันสินค้า HVA และ SVP พร้อมอุปกรณ์กลุ่มหลังคา ฝา , ฝ้า และกลุ่มไม้ต่างๆ (คะแนนเต็ม 2.5 คะแนน)',
+              2.5,
+              q1_3_rating,
+              setQ1_3_rating,
+              scoreResults.q1_3_score,
+              q1_3_note,
+              setQ1_3_note
+            )}
+
+            {renderQuestionCard(
+              4,
+              '1.4',
+              'มีการเก็บราคาสินค้าคู่แข่ง (คะแนนเต็ม 2.5 คะแนน)',
+              2.5,
+              q1_4_rating,
+              setQ1_4_rating,
+              scoreResults.q1_4_score,
+              q1_4_note,
+              setQ1_4_note
             )}
           </div>
 
-          {/* Group 2: ด้านความรู้เกี่ยวกับสินค้าและคำแนะนำ */}
-          <div className="space-y-2 pt-2">
-            <h4 className="text-xs font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-3 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800/50">
-              หมวดที่ 2: ด้านความรู้เกี่ยวกับสินค้าและคำแนะนำ (Product Knowledge & Advice)
-            </h4>
-            {renderRatingGroup(
-              '2.1 ความรู้ ความเข้าใจในรายละเอียด คุณสมบัติ และสเปกสินค้าเป็นอย่างดี',
-              'อธิบายสเปกสินค้า วิธีใช้งาน และมาตรฐานสินค้าได้อย่างถูกต้องแม่นยำ',
-              scoreProductKnowledge,
-              setScoreProductKnowledge
+          {/* หมวดที่ 2: การรับผิดชอบในหน้าที่ (คะแนนเต็ม 5 คะแนน) */}
+          <div className="space-y-2.5 pt-3">
+            <div className="flex items-center justify-between bg-indigo-100 dark:bg-indigo-950/60 px-3.5 py-2 rounded-xl border border-indigo-300 dark:border-indigo-800">
+              <span className="text-xs font-black text-indigo-900 dark:text-indigo-200">
+                หมวดที่ 2: การรับผิดชอบในหน้าที่ (คะแนนเต็ม 5 คะแนน)
+              </span>
+              <span className="text-xs font-extrabold text-indigo-800 dark:text-indigo-300 bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-md">
+                รวมหมวด 2: {scoreResults.section2Score} / 5 คะแนน
+              </span>
+            </div>
+
+            {renderQuestionCard(
+              5,
+              '2.1',
+              'มีการแจ้งล่วงหน้า ในการจัดส่งสินค้าตรงต่อเวลาตามที่นัดหมาย และอัพเดตเมื่อเกิดปัญหา เช่น ขนส่งอาจล่าช้า เป็นต้น (คะแนนเต็ม 2.5 คะแนน)',
+              2.5,
+              q2_1_rating,
+              setQ2_1_rating,
+              scoreResults.q2_1_score,
+              q2_1_note,
+              setQ2_1_note
             )}
-            {renderRatingGroup(
-              '2.2 ความสามารถในการให้คำแนะนำ ตอบข้อซักถาม และเสนอแนะสินค้าที่ตรงความต้องการ',
-              'ช่วยเสนอโซลูชันที่ประหยัดงบประมาณและตรงตามวัตถุประสงค์ของลูกค้า',
-              scoreConsultation,
-              setScoreConsultation
-            )}
-            {renderRatingGroup(
-              '2.3 การแจ้งข้อมูลข่าวสาร โปรโมชั่น สิทธิประโยชน์ และสินค้าใหม่ๆ อย่างครบถ้วน',
-              'อัปเดตราคา โปรโมชั่นพิเศษ และแคมเปญส่งเสริมการขายให้ลูกค้าทราบทันที',
-              scorePromotionUpdate,
-              setScorePromotionUpdate
+
+            {renderQuestionCard(
+              6,
+              '2.2',
+              'มีความรับผิดชอบในการติดตามแก้ไขปัญหา และการจัดการปัญหาเฉพาะหน้าได้รวดเร็ว (คะแนนเต็ม 2.5 คะแนน)',
+              2.5,
+              q2_2_rating,
+              setQ2_2_rating,
+              scoreResults.q2_2_score,
+              q2_2_note,
+              setQ2_2_note
             )}
           </div>
 
-          {/* Group 3: ด้านความรวดเร็วและการประสานงาน */}
-          <div className="space-y-2 pt-2">
-            <h4 className="text-xs font-bold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 px-3 py-1.5 rounded-lg border border-teal-200 dark:border-teal-800/50">
-              หมวดที่ 3: ด้านความรวดเร็วและการประสานงาน (Speed & Coordination)
-            </h4>
-            {renderRatingGroup(
-              '3.1 ความรวดเร็วและถูกต้องในการจัดทำและส่งใบเสนอราคา (Quotation)',
-              'จัดทำใบเสนอราคาได้รวดเร็ว ถูกต้องตามเงื่อนไขที่ตกลง',
-              scoreQuotationSpeed,
-              setScoreQuotationSpeed
+          {/* หมวดที่ 3: ความประทับใจ (คะแนนเต็ม 5 คะแนน) */}
+          <div className="space-y-2.5 pt-3">
+            <div className="flex items-center justify-between bg-teal-100 dark:bg-teal-950/60 px-3.5 py-2 rounded-xl border border-teal-300 dark:border-teal-800">
+              <span className="text-xs font-black text-teal-900 dark:text-teal-200">
+                หมวดที่ 3: ความประทับใจ (คะแนนเต็ม 5 คะแนน)
+              </span>
+              <span className="text-xs font-extrabold text-teal-800 dark:text-teal-300 bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-md">
+                รวมหมวด 3: {scoreResults.section3Score} / 5 คะแนน
+              </span>
+            </div>
+
+            {renderQuestionCard(
+              7,
+              '3.1',
+              'เข้าพบอย่างสม่ำเสมอ เดือนละ 2-3 ครั้ง ติดตามอัพเดตยอดขายและสิทธิประโยชน์อย่างต่อเนื่อง (คะแนนเต็ม 2.5 คะแนน)',
+              2.5,
+              q3_1_rating,
+              setQ3_1_rating,
+              scoreResults.q3_1_score,
+              q3_1_note,
+              setQ3_1_note
             )}
-            {renderRatingGroup(
-              '3.2 การติดตามสถานะคำสั่งซื้อ การจัดส่งสินค้า และการรายงานความคืบหน้า',
-              'อัปเดตสถานะการขนส่ง และแจ้งกำหนดการส่งมอบสินค้าอย่างชัดเจน',
-              scoreFollowUp,
-              setScoreFollowUp
+
+            {renderQuestionCard(
+              8,
+              '3.2',
+              'ใส่ใจบริการ มีท่าทีสุภาพเรียบร้อย เป็นกันเอง (คะแนนเต็ม 2.5 คะแนน)',
+              2.5,
+              q3_2_rating,
+              setQ3_2_rating,
+              scoreResults.q3_2_score,
+              q3_2_note,
+              setQ3_2_note
             )}
-            {renderRatingGroup(
-              '3.3 การประสานงานแก้ไขปัญหาเฉพาะหน้า และการดูแลหลังการขายอย่างจริงใจ',
-              'เมื่อเกิดปัญหา สามารถประสานงานแก้ไขและรับผิดชอบได้อย่างน่าประทับใจ',
-              scoreProblemSolving,
-              setScoreProblemSolving
-            )}
+          </div>
+
+          {/* Real-time Score Ratio Summary Box */}
+          <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border-2 border-emerald-400 dark:border-emerald-600 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 block">
+                ⭐ สรุปผลคะแนนประเมิน (คิดเป็นอัตราส่วนคะแนนเต็ม 20 คะแนน):
+              </span>
+              <span className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                คะแนนดิบ 3 หมวด: {scoreResults.rawTotalScore} / 30 คะแนน • ร้อยละความพึงพอใจ: {scoreResults.percentageScore}%
+              </span>
+            </div>
+            <div className="text-right self-end sm:self-center">
+              <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300">
+                {scoreResults.scoreOutOf20}
+              </span>
+              <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200"> / 20.00 คะแนน</span>
+              <div className="text-xs font-bold text-emerald-600">{scoreResults.gradeLabel}</div>
+            </div>
           </div>
         </div>
 
-        {/* Section 4: ตารางเปรียบเทียบราคาคู่แข่ง (Competitor Price Matrix) */}
-        <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-800/40">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+        {/* ================= ส่วนที่ 2: ข้อมูลราคาสินค้า & Feedback (ตามภาพที่ 2) ================= */}
+        <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-800/40 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <h3 className="text-sm font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-emerald-600" />
-                <span>3. การประเมินราคาและความสามารถในการแข่งขันในตลาด</span>
+                <span>ส่วนที่ 2: ข้อมูลราคาสินค้า & Feedback โปรโมชั่นต่างๆ (ตามภาพที่ 2)</span>
               </h3>
-              <p className="text-[11px] text-slate-500">
-                วิเคราะห์ราคาสินค้าเทียบกับคู่แข่ง (ไทวัสดุ, โกลบอลเฮ้าส์, ร้านค้าวัสดุก่อสร้างในพื้นที่) เพื่อใช้วางกลยุทธ์การขาย
-              </p>
             </div>
             <button
               type="button"
@@ -550,234 +675,168 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
             </button>
           </div>
 
-          {/* Overall Price Comparison Radio */}
-          <div className="mb-4 p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
-            <span className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">
-              ภาพรวมระดับราคาสินค้าของบริษัท เมื่อเทียบกับคู่แข่งในตลาด:
+          {/* ข้อ 1: ข้อมูลราคาสินค้า & feedback โปรโมชั่นต่างๆ โดยรวมอยู่ในเกณฑ์ สูงกว่า,ต่ำกว่า,ใกล้เคียง,ไม่แน่ใจ,ไม่สามารถเปิดเผยได้ กับคู่แข่ง */}
+          <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+            <span className="block text-xs font-bold text-slate-900 dark:text-slate-100">
+              1. ข้อมูลราคาสินค้า & feedback โปรโมชั่นต่างๆ โดยรวมอยู่ในเกณฑ์เปรียบเทียบกับของคู่แข่ง:
             </span>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               {[
-                { value: 'lower', label: '🟢 ถูกกว่าคู่แข่ง (ได้เปรียบ)', sub: 'แข่งขันได้ดีมาก' },
-                { value: 'similar', label: '🔵 ใกล้เคียงคู่แข่ง', sub: 'ราคาตลาดปกติ' },
-                { value: 'higher', label: '🟠 สูงกว่าคู่แข่ง', sub: 'เน้นบริการ/คุณภาพ' },
-                { value: 'unknown', label: '⚪ ไม่แน่ใจ / ไม่ระบุ', sub: 'ยังไม่ได้เทียบ' },
+                { value: 'lower', label: 'ต่ำกว่า', bg: 'hover:bg-emerald-50' },
+                { value: 'similar', label: 'ใกล้เคียง', bg: 'hover:bg-blue-50' },
+                { value: 'higher', label: 'สูงกว่า', bg: 'hover:bg-amber-50' },
+                { value: 'uncertain', label: 'ไม่แน่ใจ', bg: 'hover:bg-slate-50' },
+                { value: 'undisclosed', label: 'ไม่สามารถเปิดเผยได้', bg: 'hover:bg-purple-50' },
               ].map((opt) => (
                 <label
                   key={opt.value}
-                  className={`flex flex-col p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
-                    overallPriceComparison === opt.value
-                      ? 'border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 font-bold shadow-xs'
-                      : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                    feedbackPriceAndPromo === opt.value
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 font-bold shadow-xs'
+                      : `border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 ${opt.bg}`
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="overallPrice"
-                      value={opt.value}
-                      checked={overallPriceComparison === opt.value}
-                      onChange={(e) => setOverallPriceComparison(e.target.value as any)}
-                      className="text-emerald-600 focus:ring-emerald-500"
-                    />
-                    <span>{opt.label}</span>
-                  </div>
-                  <span className="text-[10px] text-slate-500 ml-5 mt-0.5">{opt.sub}</span>
+                  <input
+                    type="radio"
+                    name="feedbackPrice"
+                    value={opt.value}
+                    checked={feedbackPriceAndPromo === opt.value}
+                    onChange={(e) => setFeedbackPriceAndPromo(e.target.value as any)}
+                    className="text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>{opt.label}</span>
                 </label>
               ))}
             </div>
-          </div>
-
-          {/* Table: Products Price Comparison */}
-          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
-                  <th className="p-2.5 w-8 text-center">#</th>
-                  <th className="p-2.5 min-w-[180px]">รายการสินค้า</th>
-                  <th className="p-2.5 w-28 text-right">ราคาเรา (฿)</th>
-                  <th className="p-2.5 w-28 text-right">ราคาคู่แข่ง (฿)</th>
-                  <th className="p-2.5 w-32 text-center">ผลการเปรียบเทียบ</th>
-                  <th className="p-2.5 min-w-[140px]">คู่แข่งอ้างอิง (เช่น ไทวัสดุ)</th>
-                  <th className="p-2.5 min-w-[160px]">หมายเหตุ/ข้อคิดเห็น</th>
-                  <th className="p-2.5 w-10 text-center"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {competitorPriceItems.map((item, idx) => (
-                  <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    <td className="p-2 text-center text-slate-400">{idx + 1}</td>
-                    <td className="p-2">
-                      <input
-                        type="text"
-                        value={item.productName}
-                        onChange={(e) => handleUpdateCompetitorItem(item.id, 'productName', e.target.value)}
-                        placeholder="เช่น ปูน SCG เสือ, เหล็กเส้น DB12"
-                        className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs"
-                      />
-                    </td>
-                    <td className="p-2">
-                      <input
-                        type="number"
-                        value={item.ourPrice ?? ''}
-                        onChange={(e) => handleUpdateCompetitorItem(item.id, 'ourPrice', e.target.value ? Number(e.target.value) : undefined)}
-                        placeholder="0.00"
-                        className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-right text-xs font-semibold text-emerald-700 dark:text-emerald-400"
-                      />
-                    </td>
-                    <td className="p-2">
-                      <input
-                        type="number"
-                        value={item.competitorPrice ?? ''}
-                        onChange={(e) => handleUpdateCompetitorItem(item.id, 'competitorPrice', e.target.value ? Number(e.target.value) : undefined)}
-                        placeholder="0.00"
-                        className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-right text-xs text-slate-700 dark:text-slate-300"
-                      />
-                    </td>
-                    <td className="p-2 text-center">
-                      <select
-                        value={item.comparison}
-                        onChange={(e) => handleUpdateCompetitorItem(item.id, 'comparison', e.target.value)}
-                        className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium"
-                      >
-                        <option value="lower">ถูกกว่าคู่แข่ง</option>
-                        <option value="similar">ใกล้เคียงกัน</option>
-                        <option value="higher">สูงกว่าคู่แข่ง</option>
-                        <option value="unknown">ไม่แน่ใจ</option>
-                      </select>
-                    </td>
-                    <td className="p-2">
-                      <input
-                        type="text"
-                        value={item.competitorSource || ''}
-                        onChange={(e) => handleUpdateCompetitorItem(item.id, 'competitorSource', e.target.value)}
-                        placeholder="เช่น ไทวัสดุ, โกลบอลเฮ้าส์"
-                        className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs"
-                      />
-                    </td>
-                    <td className="p-2">
-                      <input
-                        type="text"
-                        value={item.note || ''}
-                        onChange={(e) => handleUpdateCompetitorItem(item.id, 'note', e.target.value)}
-                        placeholder="ข้อสังเกตเรื่องราคา/ของแถม"
-                        className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs"
-                      />
-                    </td>
-                    <td className="p-2 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveCompetitorItem(item.id)}
-                        className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
-                        title="ลบแถวนี้"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Payment Terms Satisfaction Score */}
-          <div className="mt-4">
-            {renderRatingGroup(
-              '4.1 ความเหมาะสมของเงื่อนไขการชำระเงิน ความยืดหยุ่น และระยะเวลาเครดิตเทอม',
-              'ความสะดวกในการวางบิล ชำระเงินสด โอนเงิน หรือระยะเวลาเครดิต (เช่น 7, 15, 30 วัน)',
-              scorePaymentTerms,
-              setScorePaymentTerms
-            )}
-          </div>
-        </div>
-
-        {/* Section 5: Suggestions & Future Purchase */}
-        <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-800/40 space-y-4">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-sky-600" />
-            <span>4. ข้อเสนอแนะและการตัดสินใจใช้บริการในอนาคต</span>
-          </h3>
-
-          {/* Future purchase intent */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-              ความประสงค์ในการใช้บริการหรือสั่งซื้อสินค้าในครั้งถัดไป:
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-              {[
-                { val: 'continuous', title: '✅ สั่งซื้อต่อเนื่อง 100%', desc: 'ยินดีสั่งซื้อและใช้บริการต่อแน่นอน' },
-                { val: 'compare_case_by_case', title: '⚖️ รอดูราคา/โปรโมชั่น', desc: 'เปรียบเทียบราคาเป็นครั้งคราว' },
-                { val: 'pause', title: '⏸️ ชะลอการสั่งซื้อ', desc: 'ยังไม่มีงานหรือโครงการใหม่' },
-                { val: 'no', title: '❌ ไม่มีความประสงค์สั่งซื้อ', desc: 'ต้องการเปลี่ยนผู้จำหน่าย' },
-              ].map((opt) => (
-                <label
-                  key={opt.val}
-                  className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex flex-col justify-between ${
-                    futurePurchaseIntent === opt.val
-                      ? 'border-blue-500 bg-blue-50/80 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 font-bold shadow-xs'
-                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="futureIntent"
-                      value={opt.val}
-                      checked={futurePurchaseIntent === opt.val}
-                      onChange={(e) => setFuturePurchaseIntent(e.target.value as any)}
-                      className="text-blue-600"
-                    />
-                    <span>{opt.title}</span>
-                  </div>
-                  <span className="text-[10px] text-slate-500 ml-5 mt-1">{opt.desc}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Strengths & Improvement text areas */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                👍 สิ่งที่ประทับใจเป็นพิเศษ / จุดเด่นของทีมขาย
-              </label>
-              <textarea
-                value={strengthsFeedback}
-                onChange={(e) => setStrengthsFeedback(e.target.value)}
-                rows={3}
-                placeholder="เช่น เซลส์บริการดีมาก ตอบคำถามรวดเร็ว อัธยาศัยดี ส่งของตรงเวลา..."
-                className="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                💡 สิ่งที่ต้องการให้ทีมขายปรับปรุง หรือสนับสนุนเพิ่มเติม
-              </label>
-              <textarea
-                value={improvementFeedback}
-                onChange={(e) => setImprovementFeedback(e.target.value)}
-                rows={3}
-                placeholder="เช่น อยากให้ส่งใบเสนอราคาเร็วกว่านี้, เพิ่มส่วนลดเงินสด, มีตัวอย่างสินค้า..."
-                className="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          {/* Digital Signature */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              ✍️ การลงนามรับรองแบบดิจิทัล (ชื่อผู้รับรอง / ผู้ประเมิน)
-            </label>
             <input
               type="text"
-              value={signatureName}
-              onChange={(e) => setSignatureName(e.target.value)}
-              placeholder="ระบุชื่อผู้รับรอง เช่น คุณชัยพร วงศ์สวัสดิ์"
-              className="w-full sm:max-w-md text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500"
+              value={feedbackPriceNote}
+              onChange={(e) => setFeedbackPriceNote(e.target.value)}
+              placeholder="หมายเหตุเพิ่มเติมเกี่ยวกับราคาและโปรโมชั่น"
+              className="w-full text-xs px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100"
             />
-            <p className="text-[10px] text-slate-400 mt-1">
-              * ข้อมูลจะถูกจัดเก็บในระบบคลาวด์ ปลอดภัย และทดแทนเอกสารกระดาษ 100%
-            </p>
+          </div>
+
+          {/* ตารางเก็บราคาสินค้า อย่างน้อย 3 รายการ */}
+          <div>
+            <span className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">
+              2. เก็บราคาสินค้า อย่างน้อย 3 รายการ (เทียบกับคู่แข่ง เช่น ไทวัสดุ):
+            </span>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
+                    <th className="p-2 w-8 text-center">#</th>
+                    <th className="p-2 min-w-[180px]">รายการสินค้า</th>
+                    <th className="p-2 w-44 text-center">เกณฑ์เทียบราคา</th>
+                    <th className="p-2 min-w-[180px]">หมายเหตุ (เช่น ถูกกว่าไทวัสดุ)</th>
+                    <th className="p-2 w-10 text-center"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {competitorPriceItems.map((item, idx) => (
+                    <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                      <td className="p-2 text-center text-slate-400">{idx + 1}</td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          value={item.productName}
+                          onChange={(e) => handleUpdateCompetitorItem(item.id, 'productName', e.target.value)}
+                          placeholder="เช่น ปูน SCG เสือ, ปูนปอร์ตแลนด์"
+                          className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <select
+                          value={item.comparison}
+                          onChange={(e) => handleUpdateCompetitorItem(item.id, 'comparison', e.target.value)}
+                          className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-emerald-800 dark:text-emerald-300"
+                        >
+                          <option value="lower">ต่ำกว่า</option>
+                          <option value="similar">ใกล้เคียง</option>
+                          <option value="higher">สูงกว่า</option>
+                          <option value="uncertain">ไม่แน่ใจ</option>
+                          <option value="undisclosed">ไม่สามารถเปิดเผยได้</option>
+                        </select>
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          value={item.note || ''}
+                          onChange={(e) => handleUpdateCompetitorItem(item.id, 'note', e.target.value)}
+                          placeholder="เช่น ถูกกว่าไทวัสดุ, ซื้อผ่านไทวัสดุ"
+                          className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-100"
+                        />
+                      </td>
+                      <td className="p-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCompetitorItem(item.id)}
+                          className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                          title="ลบแถวนี้"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* สินค้าที่ลูกค้าสนใจ และอยากให้ทางบริษัทฯ ทำราคาให้คือ (5 รายการ ตามภาพที่ 2) */}
+          <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+            <span className="block text-xs font-bold text-slate-900 dark:text-slate-100">
+              3. สินค้าที่ลูกค้าสนใจ และอยากให้ทางบริษัทฯ ทำราคาให้คือ:
+            </span>
+            <div className="space-y-1.5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 w-5 text-right">{i + 1}.</span>
+                  <input
+                    type="text"
+                    value={interestedProducts[i] || ''}
+                    onChange={(e) => handleInterestedProductChange(i, e.target.value)}
+                    placeholder={`สินค้าที่ลูกค้าอยากให้ทำราคา รายการที่ ${i + 1}`}
+                    className="flex-1 text-xs px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ข้อเสนอแนะเพิ่มเติม (ตามภาพที่ 2) */}
+          <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+            <label className="block text-xs font-bold text-slate-900 dark:text-slate-100">
+              4. ข้อเสนอแนะเพิ่มเติม:
+            </label>
+            <textarea
+              value={additionalFeedback}
+              onChange={(e) => setAdditionalFeedback(e.target.value)}
+              rows={3}
+              placeholder="ระบุข้อเสนอแนะเรื่องราคา, โปรโมชั่น, สต็อก หรือเรื่องคู่แข่ง..."
+              className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          {/* ลายเซ็นผู้ให้ข้อมูล / ผู้ลงนาม */}
+          <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-slate-900 dark:text-slate-100 mb-1">
+                ✍️ ผู้ให้ข้อมูล / ลงนามรับรองดิจิทัล:
+              </label>
+              <input
+                type="text"
+                value={signatureName}
+                onChange={(e) => setSignatureName(e.target.value)}
+                placeholder="ระบุชื่อผู้ให้ข้อมูล / ชื่อร้านค้า เช่น ร้านจิตต์สินโฮม"
+                className="w-full sm:max-w-md text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+              />
+            </div>
+            <div className="text-[11px] text-slate-500">
+              วันที่ประเมิน: <span className="font-bold text-slate-800 dark:text-slate-200">{date}</span>
+            </div>
           </div>
         </div>
 

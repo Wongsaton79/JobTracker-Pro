@@ -1,7 +1,7 @@
 import React from 'react';
 import { SalesEvaluation } from '../../types';
-import { formatChannelLabel, formatPriceComparisonLabel, formatFutureIntent } from '../../utils/evaluationCalculator';
-import { Printer, Download, X, Award, Check } from 'lucide-react';
+import { formatChannelText, formatPriceComparisonLabel } from '../../utils/evaluationCalculator';
+import { Printer, X, Award, Check } from 'lucide-react';
 
 interface EvaluationPrintModalProps {
   evaluation: SalesEvaluation | null;
@@ -20,53 +20,109 @@ export const EvaluationPrintModal: React.FC<EvaluationPrintModalProps> = ({
     window.print();
   };
 
-  const channelText = formatChannelLabel(evaluation.contactChannel);
-  const priceComp = formatPriceComparisonLabel(evaluation.overallPriceComparison);
-  const futureIntent = formatFutureIntent(evaluation.futurePurchaseIntent);
-
-  const questions = [
+  const questionsList = [
     {
-      category: 'หมวดที่ 1: ด้านบุคลิกภาพและการให้บริการ',
+      category: 'ส่วนที่ 1: การสื่อสารกับลูกค้าและการบริการของเซลล์ (คะแนนเต็ม 20 คะแนน)',
+      subtotal: `${evaluation.section1Score} / 20 คะแนน`,
       items: [
-        { code: '1.1', title: 'ความสุภาพ อ่อนน้อม การแต่งกาย และกิริยามารยาทในการติดต่อประสานงาน', score: evaluation.scorePoliteness },
-        { code: '1.2', title: 'ความตรงต่อเวลานัดหมาย และความสม่ำเสมอในการเข้าพบ/ติดตามงาน', score: evaluation.scorePunctuality },
-        { code: '1.3', title: 'ความกระตือรือร้น ความใส่ใจ และความพร้อมในการให้บริการด้วยความเต็มใจ', score: evaluation.scoreEnthusiasm },
+        {
+          num: 1,
+          code: '1.1',
+          text: 'เซลล์ให้ข้อมูลสินค้า ราคา และโปรโมชั่น แจ้งกิจกรรม แคมเปญได้ชัดเจน ถูกต้องและรวดเร็ว (คะแนนเต็ม 10 คะแนน)',
+          rating: evaluation.q1_1_rating,
+          score: evaluation.q1_1_score,
+          maxScore: 10,
+          note: evaluation.q1_1_note,
+        },
+        {
+          num: 2,
+          code: '1.2',
+          text: 'เซลล์มีความเอาใจใส่ ติดตามงาน เข้าเยี่ยมและติดตามการขายกับลูกค้าอย่างต่อเนื่อง (คะแนนเต็ม 5 คะแนน)',
+          rating: evaluation.q1_2_rating,
+          score: evaluation.q1_2_score,
+          maxScore: 5,
+          note: evaluation.q1_2_note,
+        },
+        {
+          num: 3,
+          code: '1.3',
+          text: 'เซลล์ผลักดันสินค้า HVA และ SVP พร้อมอุปกรณ์กลุ่มหลังคา ฝา , ฝ้า และกลุ่มไม้ต่างๆ (คะแนนเต็ม 2.5 คะแนน)',
+          rating: evaluation.q1_3_rating,
+          score: evaluation.q1_3_score,
+          maxScore: 2.5,
+          note: evaluation.q1_3_note,
+        },
+        {
+          num: 4,
+          code: '1.4',
+          text: 'มีการเก็บราคาสินค้าคู่แข่ง (คะแนนเต็ม 2.5 คะแนน)',
+          rating: evaluation.q1_4_rating,
+          score: evaluation.q1_4_score,
+          maxScore: 2.5,
+          note: evaluation.q1_4_note,
+        },
       ],
     },
     {
-      category: 'หมวดที่ 2: ด้านความรู้เกี่ยวกับสินค้าและคำแนะนำ',
+      category: 'การรับผิดชอบในหน้าที่ (คะแนนเต็ม 5 คะแนน)',
+      subtotal: `${evaluation.section2Score} / 5 คะแนน`,
       items: [
-        { code: '2.1', title: 'ความรู้ ความเข้าใจในรายละเอียด คุณสมบัติ และสเปกสินค้าเป็นอย่างดี', score: evaluation.scoreProductKnowledge },
-        { code: '2.2', title: 'ความสามารถในการให้คำแนะนำ ตอบข้อซักถาม และเสนอแนะสินค้าที่ตรงความต้องการ', score: evaluation.scoreConsultation },
-        { code: '2.3', title: 'การแจ้งข้อมูลข่าวสาร โปรโมชั่น สิทธิประโยชน์ และสินค้าใหม่ๆ อย่างครบถ้วน', score: evaluation.scorePromotionUpdate },
+        {
+          num: 5,
+          code: '2.1',
+          text: 'มีการแจ้งล่วงหน้า ในการจัดส่งสินค้าตรงต่อเวลาตามที่นัดหมาย และอัพเดตเมื่อเกิดปัญหา เช่น ขนส่งอาจล่าช้า เป็นต้น (คะแนนเต็ม 2.5 คะแนน)',
+          rating: evaluation.q2_1_rating,
+          score: evaluation.q2_1_score,
+          maxScore: 2.5,
+          note: evaluation.q2_1_note,
+        },
+        {
+          num: 6,
+          code: '2.2',
+          text: 'มีความรับผิดชอบในการติดตามแก้ไขปัญหา และการจัดการปัญหาเฉพาะหน้าได้รวดเร็ว (คะแนนเต็ม 2.5 คะแนน)',
+          rating: evaluation.q2_2_rating,
+          score: evaluation.q2_2_score,
+          maxScore: 2.5,
+          note: evaluation.q2_2_note,
+        },
       ],
     },
     {
-      category: 'หมวดที่ 3: ด้านความรวดเร็วและการประสานงาน',
+      category: 'ความประทับใจ (คะแนนเต็ม 5 คะแนน)',
+      subtotal: `${evaluation.section3Score} / 5 คะแนน`,
       items: [
-        { code: '3.1', title: 'ความรวดเร็วและถูกต้องในการจัดทำและส่งใบเสนอราคา (Quotation)', score: evaluation.scoreQuotationSpeed },
-        { code: '3.2', title: 'การติดตามสถานะคำสั่งซื้อ การจัดส่งสินค้า และการรายงานความคืบหน้า', score: evaluation.scoreFollowUp },
-        { code: '3.3', title: 'การประสานงานแก้ไขปัญหาเฉพาะหน้า และการดูแลหลังการขายอย่างจริงใจ', score: evaluation.scoreProblemSolving },
-      ],
-    },
-    {
-      category: 'หมวดที่ 4: ความพึงพอใจด้านเงื่อนไขทางการค้า',
-      items: [
-        { code: '4.1', title: 'ความเหมาะสมของเงื่อนไขการชำระเงิน ความยืดหยุ่น และระยะเวลาเครดิตเทอม', score: evaluation.scorePaymentTerms },
+        {
+          num: 7,
+          code: '3.1',
+          text: 'เข้าพบอย่างสม่ำเสมอ เดือนละ 2-3 ครั้ง ติดตามอัพเดตยอดขายและสิทธิประโยชน์อย่างต่อเนื่อง (คะแนนเต็ม 2.5 คะแนน)',
+          rating: evaluation.q3_1_rating,
+          score: evaluation.q3_1_score,
+          maxScore: 2.5,
+          note: evaluation.q3_1_note,
+        },
+        {
+          num: 8,
+          code: '3.2',
+          text: 'ใส่ใจบริการ มีท่าทีสุภาพเรียบร้อย เป็นกันเอง (คะแนนเต็ม 2.5 คะแนน)',
+          rating: evaluation.q3_2_rating,
+          score: evaluation.q3_2_score,
+          maxScore: 2.5,
+          note: evaluation.q3_2_note,
+        },
       ],
     },
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs overflow-y-auto">
-      {/* Top Action Bar (hidden when printing) */}
-      <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden my-auto print:max-h-none print:shadow-none print:rounded-none">
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white shrink-0 print:hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+      <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[95vh] overflow-hidden my-auto print:max-h-none print:shadow-none print:rounded-none">
+        {/* Modal Top Bar (hidden on print) */}
+        <div className="flex items-center justify-between px-6 py-3.5 bg-slate-900 text-white shrink-0 print:hidden">
           <div className="flex items-center gap-2">
             <Award className="w-5 h-5 text-amber-400" />
             <div>
-              <h3 className="font-bold text-sm sm:text-base">เอกสารแบบประเมินความพึงพอใจการทำงานของทีมขาย</h3>
-              <p className="text-xs text-slate-300">รหัสเอกสาร: {evaluation.evaluationCode} • ระบบดิจิทัลลดการใช้กระดาษ (Paperless)</p>
+              <h3 className="font-bold text-sm sm:text-base">เอกสารแบบประเมินความพึงพอใจ การทำงานของทีมขาย</h3>
+              <p className="text-xs text-slate-300">รหัสเอกสาร: {evaluation.evaluationCode} • คะแนนเต็ม 20 คะแนน</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -80,91 +136,114 @@ export const EvaluationPrintModal: React.FC<EvaluationPrintModalProps> = ({
             <button
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-              aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Printable Paper Canvas */}
-        <div id="printable-evaluation" className="p-6 sm:p-10 overflow-y-auto font-sans text-slate-800 text-xs sm:text-sm print:p-0 print:overflow-visible">
-          {/* Header */}
-          <div className="border-b-2 border-slate-900 pb-4 mb-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">{companyName}</h1>
-                <h2 className="text-base sm:text-lg font-bold text-blue-800 mt-1">แบบประเมินความพึงพอใจ การทำงานของทีมขาย</h2>
-                <p className="text-xs text-slate-500">Sales Representative & Commercial Satisfaction Evaluation Report</p>
-              </div>
-              <div className="text-right border border-slate-300 rounded-lg p-2.5 bg-slate-50 text-xs">
-                <div><span className="font-semibold text-slate-600">เลขที่เอกสาร:</span> <span className="font-bold text-slate-900">{evaluation.evaluationCode}</span></div>
-                <div><span className="font-semibold text-slate-600">วันที่ประเมิน:</span> {evaluation.date}</div>
-                {evaluation.jobCode && <div><span className="font-semibold text-slate-600">อ้างอิงงาน:</span> {evaluation.jobCode}</div>}
+        {/* Printable Paper Canvas (ตรงตามภาพ 100%) */}
+        <div className="p-6 sm:p-8 overflow-y-auto font-sans text-slate-900 text-xs print:p-2 print:overflow-visible bg-white">
+          {/* Header Title */}
+          <div className="text-center mb-4">
+            <h1 className="text-base sm:text-lg font-bold tracking-tight">แบบประเมินความพึงพอใจ</h1>
+            <h2 className="text-sm sm:text-base font-bold">การทำงานของทีมขาย</h2>
+            <div className="text-[11px] text-slate-500 mt-0.5">{companyName}</div>
+          </div>
+
+          {/* Top Info Row: Scoring Scale on Left, Channel on Right (ตรงตามภาพที่ 1) */}
+          <div className="flex justify-between items-start mb-4 text-xs">
+            <div className="border border-slate-300 rounded p-2 bg-slate-50/50 text-[11px] space-y-0.5">
+              <div className="font-bold text-slate-800">เกณฑ์การให้คะแนน</div>
+              <div>5 = ดีมาก</div>
+              <div>4 = ดี</div>
+              <div>3 = ปานกลาง</div>
+              <div>2 = ควรปรับปรุง</div>
+              <div>1 = ไม่ผ่าน</div>
+            </div>
+
+            <div className="text-right">
+              <div className="text-[11px] font-bold text-slate-800 mb-1">ช่องทางให้ข้อมูล</div>
+              <div className="border border-slate-300 rounded overflow-hidden inline-block text-left text-[11px]">
+                <div className={`px-3 py-0.5 border-b border-slate-200 flex items-center gap-1.5 ${evaluation.contactChannel === 'phone' ? 'bg-slate-200 font-bold' : ''}`}>
+                  <span className="font-mono">{evaluation.contactChannel === 'phone' ? '✓' : '□'}</span>
+                  <span>โทรศัพท์</span>
+                </div>
+                <div className={`px-3 py-0.5 border-b border-slate-200 flex items-center gap-1.5 ${evaluation.contactChannel === 'line' ? 'bg-slate-200 font-bold' : ''}`}>
+                  <span className="font-mono">{evaluation.contactChannel === 'line' ? '✓' : '□'}</span>
+                  <span>Line</span>
+                </div>
+                <div className={`px-3 py-0.5 flex items-center gap-1.5 ${evaluation.contactChannel === 'onsite' ? 'bg-emerald-100 font-bold text-emerald-950' : ''}`}>
+                  <span className="font-mono">{evaluation.contactChannel === 'onsite' ? '✓' : '□'}</span>
+                  <span>Onsite</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Section: General Information */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
-            <h4 className="font-bold text-slate-900 border-b border-slate-200 pb-2 mb-3 text-sm">ข้อมูลทั่วไปของลูกค้าและพนักงานขาย</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
-              <div><span className="font-semibold text-slate-600">ชื่อลูกค้า / ร้านค้า / โครงการ:</span> <span className="font-bold text-slate-900">{evaluation.customerName}</span></div>
-              <div><span className="font-semibold text-slate-600">พนักงานขายที่ถูกประเมิน:</span> <span className="font-bold text-blue-900">{evaluation.salesRepName}</span></div>
-              <div><span className="font-semibold text-slate-600">เบอร์โทรศัพท์ติดต่อ:</span> {evaluation.customerPhone || '-'}</div>
-              <div><span className="font-semibold text-slate-600">แผนก / ทีมขาย:</span> {evaluation.salesDepartment || '-'}</div>
-              <div><span className="font-semibold text-slate-600">ผู้ให้ข้อมูล / ตำแหน่ง:</span> {evaluation.evaluatorName} {evaluation.customerPosition ? `(${evaluation.customerPosition})` : ''}</div>
-              <div><span className="font-semibold text-slate-600">ช่องทางการติดต่อเข้าพบ:</span> {channelText}</div>
-            </div>
+          {/* Customer & Rep Details */}
+          <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 border border-slate-300 rounded mb-4 text-[11px]">
+            <div><span className="font-semibold text-slate-600">ร้านค้า / ลูกค้า:</span> <span className="font-bold text-slate-900">{evaluation.customerName}</span></div>
+            <div><span className="font-semibold text-slate-600">พนักงานขายที่ถูกประเมิน:</span> <span className="font-bold text-blue-900">{evaluation.salesRepName}</span></div>
+            <div><span className="font-semibold text-slate-600">ผู้ให้ข้อมูล:</span> {evaluation.evaluatorName}</div>
+            <div><span className="font-semibold text-slate-600">วันที่ประเมิน:</span> {evaluation.date}</div>
           </div>
 
-          {/* Rating Scale Legend */}
-          <div className="flex items-center justify-between text-[11px] text-slate-600 bg-blue-50/60 border border-blue-200 px-3 py-2 rounded-lg mb-4">
-            <span className="font-semibold text-blue-900">เกณฑ์การให้คะแนน:</span>
-            <span>5 = พึงพอใจมากที่สุด</span>
-            <span>4 = พึงพอใจมาก</span>
-            <span>3 = ปานกลาง</span>
-            <span>2 = ควรปรับปรุง</span>
-            <span>1 = ต้องปรับปรุงเร่งด่วน</span>
-          </div>
-
-          {/* Table: Questions and Scores */}
-          <div className="border border-slate-300 rounded-xl overflow-hidden mb-6">
-            <table className="w-full text-left border-collapse">
+          {/* ส่วนที่ 1: ตารางข้อคำถามและคะแนน */}
+          <div className="border border-slate-400 rounded overflow-hidden mb-4">
+            <table className="w-full text-left border-collapse text-[11px]">
               <thead>
-                <tr className="bg-slate-100 text-slate-800 text-xs border-b border-slate-300">
-                  <th className="py-2.5 px-3 font-bold w-12 text-center">ข้อ</th>
-                  <th className="py-2.5 px-3 font-bold">หัวข้อการประเมิน</th>
-                  <th className="py-2.5 px-2 font-bold w-10 text-center">5</th>
-                  <th className="py-2.5 px-2 font-bold w-10 text-center">4</th>
-                  <th className="py-2.5 px-2 font-bold w-10 text-center">3</th>
-                  <th className="py-2.5 px-2 font-bold w-10 text-center">2</th>
-                  <th className="py-2.5 px-2 font-bold w-10 text-center">1</th>
+                <tr className="bg-slate-100 border-b border-slate-400">
+                  <th className="p-1.5 w-10 text-center border-r border-slate-300">ลำดับที่</th>
+                  <th className="p-1.5 border-r border-slate-300">หัวข้อการประเมิน</th>
+                  <th colSpan={5} className="p-1.5 text-center border-r border-slate-300">คะแนน</th>
+                  <th className="p-1.5 w-28 text-center border-r border-slate-300">คะแนนที่ได้</th>
+                  <th className="p-1.5 min-w-[120px]">หมายเหตุ</th>
+                </tr>
+                <tr className="bg-slate-50 border-b border-slate-300 text-[10px] text-center font-bold text-slate-600">
+                  <th className="border-r border-slate-300"></th>
+                  <th className="border-r border-slate-300"></th>
+                  <th className="w-7 border-r border-slate-300">5</th>
+                  <th className="w-7 border-r border-slate-300">4</th>
+                  <th className="w-7 border-r border-slate-300">3</th>
+                  <th className="w-7 border-r border-slate-300">2</th>
+                  <th className="w-7 border-r border-slate-300">1</th>
+                  <th className="border-r border-slate-300"></th>
+                  <th></th>
                 </tr>
               </thead>
-              <tbody className="text-xs divide-y divide-slate-200">
-                {questions.map((sec) => (
+              <tbody className="divide-y divide-slate-300">
+                {questionsList.map((sec) => (
                   <React.Fragment key={sec.category}>
-                    <tr className="bg-slate-50/80 font-bold text-slate-900">
-                      <td colSpan={7} className="py-2 px-3 bg-blue-50/40 text-blue-950 font-bold text-[11px]">
-                        {sec.category}
+                    <tr className="bg-slate-100/80 font-bold">
+                      <td colSpan={9} className="p-1.5 text-slate-900 bg-slate-200/60 font-bold">
+                        <div className="flex justify-between items-center">
+                          <span>{sec.category}</span>
+                          <span className="text-[10px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
+                            รวมหมวด: {sec.subtotal}
+                          </span>
+                        </div>
                       </td>
                     </tr>
                     {sec.items.map((item) => (
-                      <tr key={item.code} className="hover:bg-slate-50/50">
-                        <td className="py-2 px-3 text-center font-medium text-slate-500">{item.code}</td>
-                        <td className="py-2 px-3 text-slate-800">{item.title}</td>
+                      <tr key={item.num} className="hover:bg-slate-50/50">
+                        <td className="p-1.5 text-center border-r border-slate-300 font-semibold">{item.num}</td>
+                        <td className="p-1.5 border-r border-slate-300">{item.text}</td>
                         {[5, 4, 3, 2, 1].map((val) => (
-                          <td key={val} className="py-2 px-2 text-center">
-                            {item.score === val ? (
-                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-600 text-white font-bold text-[10px]">
-                                <Check className="w-3.5 h-3.5" />
+                          <td key={val} className="p-1 text-center border-r border-slate-300">
+                            {item.rating === val ? (
+                              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[9px]">
+                                ✓
                               </span>
                             ) : (
                               <span className="text-slate-300 font-light">•</span>
                             )}
                           </td>
                         ))}
+                        <td className="p-1.5 text-center border-r border-slate-300 font-bold text-emerald-800">
+                          {item.score} / {item.maxScore}
+                        </td>
+                        <td className="p-1.5 text-slate-700 text-[10px]">{item.note || '-'}</td>
                       </tr>
                     ))}
                   </React.Fragment>
@@ -173,115 +252,131 @@ export const EvaluationPrintModal: React.FC<EvaluationPrintModalProps> = ({
             </table>
           </div>
 
-          {/* Section: Competitor Price Comparison (ตารางเปรียบเทียบราคาคู่แข่ง) */}
-          <div className="border border-slate-300 rounded-xl p-4 mb-6 bg-white">
-            <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-2">
-              <div>
-                <h4 className="font-bold text-slate-900 text-sm">การประเมินราคาและความสามารถในการแข่งขันในตลาด</h4>
-                <p className="text-[11px] text-slate-500">เปรียบเทียบระดับราคาสินค้ากับคู่แข่งในตลาด เช่น ไทวัสดุ, โกลบอลเฮ้าส์ หรือร้านค้าท้องถิ่น</p>
+          {/* สรุปคะแนน (อัตราส่วนเทียบเต็ม 20 คะแนน) */}
+          <div className="p-3 bg-emerald-50 border-2 border-emerald-400 rounded-xl mb-4 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-bold text-emerald-950">
+                ⭐ คะแนนประเมินรวม (คิดเป็นอัตราส่วนคะแนนเต็ม 20 คะแนน):
               </div>
-              <div className="text-right">
-                <span className="text-xs font-semibold text-slate-600 mr-2">ภาพรวมระดับราคา:</span>
-                <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-blue-100 text-blue-900 border border-blue-300">
-                  {priceComp.label}
+              <div className="text-[11px] text-emerald-800 mt-0.5">
+                คะแนนดิบ 3 หมวด: {evaluation.rawTotalScore} / 30 คะแนน • ร้อยละความพึงพอใจ: {evaluation.percentageScore}%
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-xl font-black text-emerald-700">{evaluation.scoreOutOf20}</span>
+              <span className="text-xs font-bold text-emerald-900"> / 20.00</span>
+              <div className="text-[10px] font-bold text-emerald-600">{evaluation.gradeLabel}</div>
+            </div>
+          </div>
+
+          {/* ส่วนที่ 2: ข้อมูลราคาสินค้า & Feedback (ตรงตามภาพที่ 2) */}
+          <div className="border border-slate-400 rounded overflow-hidden mb-4">
+            <div className="bg-slate-200 p-1.5 font-bold text-slate-900 border-b border-slate-400 text-xs">
+              ส่วนที่ 2: ข้อมูลราคาสินค้า & Feedback โปรโมชั่นต่างๆ
+            </div>
+
+            <table className="w-full text-left border-collapse text-[11px]">
+              <thead>
+                <tr className="bg-slate-100 border-b border-slate-300 text-center font-bold">
+                  <th className="p-1.5 w-8 border-r border-slate-300">#</th>
+                  <th className="p-1.5 text-left border-r border-slate-300">หัวข้อ / รายการสินค้า</th>
+                  <th className="p-1.5 w-14 border-r border-slate-300">สูงกว่า</th>
+                  <th className="p-1.5 w-14 border-r border-slate-300">ต่ำกว่า</th>
+                  <th className="p-1.5 w-14 border-r border-slate-300">ใกล้เคียง</th>
+                  <th className="p-1.5 w-14 border-r border-slate-300">ไม่แน่ใจ</th>
+                  <th className="p-1.5 w-24 border-r border-slate-300">ไม่สามารถเปิดเผยได้</th>
+                  <th className="p-1.5 min-w-[100px]">หมายเหตุ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-300">
+                {/* ข้อ 1 ภาพรวมราคา */}
+                <tr className="bg-blue-50/40 font-medium">
+                  <td className="p-1.5 text-center border-r border-slate-300 font-bold">1</td>
+                  <td className="p-1.5 border-r border-slate-300">
+                    ข้อมูลราคาสินค้า&feedback โปรโมชั่นต่างๆ โดยรวมอยู่ในเกณฑ์เปรียบเทียบกับของคู่แข่ง
+                  </td>
+                  {['higher', 'lower', 'similar', 'uncertain', 'undisclosed'].map((opt) => (
+                    <td key={opt} className="p-1 text-center border-r border-slate-300">
+                      {evaluation.feedbackPriceAndPromo === opt ? (
+                        <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white font-bold text-[9px]">
+                          ✓
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 font-light">•</span>
+                      )}
+                    </td>
+                  ))}
+                  <td className="p-1.5 text-[10px] text-slate-700">{evaluation.feedbackPriceNote || '-'}</td>
+                </tr>
+
+                {/* ตารางเก็บราคาสินค้า อย่างน้อย 3 รายการ */}
+                <tr className="bg-slate-100 font-bold">
+                  <td colSpan={8} className="p-1.5 bg-slate-100 text-slate-900">
+                    เก็บราคาสินค้า อย่างน้อย 3 รายการ (เทียบกับคู่แข่ง เช่น ไทวัสดุ)
+                  </td>
+                </tr>
+
+                {(evaluation.competitorPriceItems || []).map((item, idx) => (
+                  <tr key={item.id || idx}>
+                    <td className="p-1.5 text-center border-r border-slate-300 text-slate-500">{idx + 1}</td>
+                    <td className="p-1.5 border-r border-slate-300 font-medium">{item.productName}</td>
+                    {['higher', 'lower', 'similar', 'uncertain', 'undisclosed'].map((opt) => (
+                      <td key={opt} className="p-1 text-center border-r border-slate-300">
+                        {item.comparison === opt ? (
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[9px]">
+                            ✓
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 font-light">•</span>
+                        )}
+                      </td>
+                    ))}
+                    <td className="p-1.5 text-[10px] text-slate-700">{item.note || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* สินค้าที่ลูกค้าสนใจ และอยากให้ทางบริษัทฯ ทำราคาให้คือ (5 รายการ ตามภาพที่ 2) */}
+          <div className="border border-slate-300 rounded p-3 mb-4 bg-slate-50/40 text-[11px] space-y-1">
+            <div className="font-bold text-slate-800 mb-1">
+              สินค้าที่ลูกค้าสนใจ และอยากให้ทางบริษัทฯ ทำราคาให้คือ:
+            </div>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-slate-500 w-4">{i + 1}.</span>
+                <span className="flex-1 border-b border-dotted border-slate-400 py-0.5 text-slate-800 font-medium">
+                  {evaluation.interestedProducts?.[i] || '-'}
                 </span>
               </div>
-            </div>
+            ))}
+          </div>
 
-            {/* Price Items Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left border-collapse border border-slate-200">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
-                    <th className="p-2 border-r border-slate-200 w-10 text-center">ลำดับ</th>
-                    <th className="p-2 border-r border-slate-200">รายการสินค้าตัวอย่าง</th>
-                    <th className="p-2 border-r border-slate-200 text-right w-24">ราคาเรา (บาท)</th>
-                    <th className="p-2 border-r border-slate-200 text-right w-28">ราคาคู่แข่ง (บาท)</th>
-                    <th className="p-2 border-r border-slate-200 text-center w-28">ผลการเทียบราคา</th>
-                    <th className="p-2 border-r border-slate-200">แหล่งอ้างอิงคู่แข่ง</th>
-                    <th className="p-2">ข้อสังเกต/ความเห็น</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {(evaluation.competitorPriceItems || []).map((item, idx) => (
-                    <tr key={item.id || idx}>
-                      <td className="p-2 border-r border-slate-200 text-center text-slate-500">{idx + 1}</td>
-                      <td className="p-2 border-r border-slate-200 font-medium text-slate-800">{item.productName}</td>
-                      <td className="p-2 border-r border-slate-200 text-right font-semibold text-emerald-700">
-                        {item.ourPrice !== undefined ? `${item.ourPrice.toLocaleString()} ฿` : '-'}
-                      </td>
-                      <td className="p-2 border-r border-slate-200 text-right text-slate-700">
-                        {item.competitorPrice !== undefined ? `${item.competitorPrice.toLocaleString()} ฿` : '-'}
-                      </td>
-                      <td className="p-2 border-r border-slate-200 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                          item.comparison === 'lower'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : item.comparison === 'higher'
-                            ? 'bg-amber-100 text-amber-800'
-                            : item.comparison === 'similar'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}>
-                          {item.comparison === 'lower' ? 'ถูกกว่าคู่แข่ง' : item.comparison === 'higher' ? 'สูงกว่าคู่แข่ง' : item.comparison === 'similar' ? 'ใกล้เคียงกัน' : 'ไม่แน่ใจ'}
-                        </span>
-                      </td>
-                      <td className="p-2 border-r border-slate-200 text-slate-600">{item.competitorSource || '-'}</td>
-                      <td className="p-2 text-slate-600">{item.note || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* ข้อเสนอแนะเพิ่มเติม (ตามภาพที่ 2) */}
+          <div className="border border-slate-300 rounded p-3 mb-4 text-[11px]">
+            <div className="font-bold text-slate-800 mb-1">ข้อเสนอแนะเพิ่มเติม:</div>
+            <div className="p-2 bg-slate-50 border border-slate-200 rounded min-h-[50px] whitespace-pre-wrap text-slate-800">
+              {evaluation.additionalFeedback || '-'}
             </div>
           </div>
 
-          {/* Section: Score Summary & Customer Feedback */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
-              <h4 className="font-bold text-slate-900 mb-2 text-xs">สรุปผลการประเมินภาพรวม</h4>
-              <div className="flex items-center gap-4">
-                <div className="w-20 h-20 rounded-2xl bg-emerald-600 text-white flex flex-col items-center justify-center shadow-md">
-                  <span className="text-xl font-black">{evaluation.averageScore}</span>
-                  <span className="text-[10px]">เต็ม 5.0</span>
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-slate-900">
-                    คะแนนรวม: {evaluation.totalScore} / 50 ({evaluation.percentageScore}%)
-                  </div>
-                  <div className="text-xs font-semibold text-emerald-700 mt-0.5">
-                    ระดับความพึงพอใจ: {evaluation.gradeLabel}
-                  </div>
-                  <div className="text-[11px] text-slate-500 mt-1">
-                    ความประสงค์สั่งซื้อครั้งต่อไป: <span className="font-semibold text-slate-800">{futureIntent.label}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col justify-between">
+          {/* ส่วนลงนาม ผู้ให้ข้อมูล / ร้าน / วันที่ (มุมล่างขวา ตามภาพที่ 2) */}
+          <div className="flex justify-end pt-3 text-[11px]">
+            <div className="text-left space-y-1.5 min-w-[240px]">
               <div>
-                <h4 className="font-bold text-slate-900 mb-1 text-xs">ข้อคิดเห็นและข้อเสนอแนะ</h4>
-                {evaluation.strengthsFeedback && (
-                  <p className="text-xs text-slate-700 mb-1">
-                    <span className="font-semibold text-emerald-800">จุดเด่นที่ประทับใจ:</span> {evaluation.strengthsFeedback}
-                  </p>
-                )}
-                {evaluation.improvementFeedback && (
-                  <p className="text-xs text-slate-700">
-                    <span className="font-semibold text-amber-800">สิ่งที่ต้องการให้ปรับปรุง:</span> {evaluation.improvementFeedback}
-                  </p>
-                )}
+                <span className="font-semibold text-slate-700">ผู้ให้ข้อมูล: </span>
+                <span className="font-bold text-slate-900 underline decoration-dotted">{evaluation.signatureName || evaluation.evaluatorName}</span>
               </div>
-              <div className="mt-3 pt-2 border-t border-slate-200 flex justify-between items-end text-[11px] text-slate-500">
-                <span>ลงนามแบบดิจิทัล (Paperless Verification)</span>
-                <span className="font-bold text-slate-800 underline decoration-dotted">{evaluation.signatureName || evaluation.evaluatorName}</span>
+              <div>
+                <span className="font-semibold text-slate-700">ร้าน: </span>
+                <span className="font-bold text-slate-900 underline decoration-dotted">{evaluation.customerName}</span>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-700">วันที่: </span>
+                <span className="font-bold text-slate-900">{evaluation.date}</span>
               </div>
             </div>
-          </div>
-
-          {/* Footer note */}
-          <div className="text-center text-[10px] text-slate-400 border-t border-slate-200 pt-3">
-            แบบประเมินนี้จัดทำผ่านระบบอิเล็กทรอนิกส์เพื่อความสะดวกรวดเร็วและลดการใช้กระดาษ (100% Paperless Digital System) • บันทึกเวลา: {new Date(evaluation.createdAt).toLocaleString('th-TH')}
           </div>
         </div>
       </div>

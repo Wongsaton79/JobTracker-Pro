@@ -12,6 +12,7 @@ import { INITIAL_JOBS, INITIAL_SETTINGS } from './data/initialData';
 import { JobItem, JobStatus, SyncSettings, SalesEvaluation } from './types';
 import { SalesEvaluationView } from './components/SalesEvaluation/SalesEvaluationView';
 import { INITIAL_EVALUATIONS } from './data/initialEvaluations';
+import { normalizeEvaluation } from './utils/evaluationCalculator';
 import {
   subscribeToFirebaseJobs,
   saveJobToFirebase,
@@ -53,7 +54,10 @@ export default function App() {
     try {
       const saved = localStorage.getItem('sales_satisfaction_evaluations');
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((e: any) => normalizeEvaluation(e)).filter(Boolean);
+        }
       }
     } catch (e) {
       console.warn('Failed to parse localStorage evaluations:', e);

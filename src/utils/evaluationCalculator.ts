@@ -1,191 +1,284 @@
-import { CompetitorPriceItem, SalesEvaluation } from '../types';
+import { CompetitorPriceItem, PriceComparisonOption } from '../types';
 
 export const DEFAULT_COMPETITOR_ITEMS: CompetitorPriceItem[] = [
   {
     id: 'comp-1',
-    productName: 'ปูนซีเมนต์ผสม SCG เสือ ก่อ-ฉาบ-เท (50 กก.)',
+    productName: 'ปูน SCG เสือ ก่อ-ฉาบ-เท (50 กก.)',
     ourPrice: 135,
     competitorPrice: 138,
     comparison: 'lower',
-    competitorSource: 'ไทวัสดุ บางนา',
-    note: 'ราคาถูกกว่าไทวัสดุ 3 บาท/ถุง ลูกค้าพอใจมาก',
+    note: 'ถูกกว่าไทวัสดุ 3 บาท/ถุง',
   },
   {
     id: 'comp-2',
-    productName: 'เหล็กเส้นกลม ผิวเรียบ SR24 ขนาด 9 มม. (มอก.)',
-    ourPrice: 168,
-    competitorPrice: 165,
-    comparison: 'higher',
-    competitorSource: 'โกลบอลเฮ้าส์',
-    note: 'ราคาสูงกว่าคู่แข่งเล็กน้อย แต่บริการส่งเร็วกว่า',
+    productName: 'ปูนปอร์ตแลนด์ Type 1',
+    ourPrice: 155,
+    competitorPrice: 158,
+    comparison: 'lower',
+    note: 'ซื้อผ่านไทวัสดุ',
   },
   {
     id: 'comp-3',
-    productName: 'สีน้ำทาภายนอก TOA SuperShield ชนิดกึ่งเงา (5 แกลลอน)',
-    ourPrice: 2450,
-    competitorPrice: 2490,
-    comparison: 'similar',
-    competitorSource: 'ร้านค้าวัสดุท้องถิ่น',
-    note: 'ราคาใกล้เคียงกัน แต่แถมอุปกรณ์ลูกกลิ้ง',
+    productName: 'แผ่นฝ้าทีบาร์ ลายหยาดเพชร',
+    ourPrice: 142,
+    competitorPrice: 140,
+    comparison: 'higher',
+    note: 'ลูกค้าแจ้งราคา 91, ฝ้าเงิน 142 B ไม่รับเข้าสต็อก',
   },
 ];
 
-export interface ScoreBreakdown {
-  serviceScore: number; // หมวด 1
-  serviceAvg: number;
-  productScore: number; // หมวด 2
-  productAvg: number;
-  speedScore: number; // หมวด 3
-  speedAvg: number;
-  paymentScore: number; // หมวด 4
-  paymentAvg: number;
-  totalScore: number;
-  maxScore: number;
-  averageScore: number;
-  percentageScore: number;
+export interface EvaluationScoreResults {
+  // Question individual scores
+  q1_1_score: number; // เต็ม 10
+  q1_2_score: number; // เต็ม 5
+  q1_3_score: number; // เต็ม 2.5
+  q1_4_score: number; // เต็ม 2.5
+
+  q2_1_score: number; // เต็ม 2.5
+  q2_2_score: number; // เต็ม 2.5
+
+  q3_1_score: number; // เต็ม 2.5
+  q3_2_score: number; // เต็ม 2.5
+
+  // Section totals
+  section1Score: number; // เต็ม 20
+  section2Score: number; // เต็ม 5
+  section3Score: number; // เต็ม 5
+
+  rawTotalScore: number; // รวมดิบ (เต็ม 30)
+  scoreOutOf20: number; // อัตราส่วนคะแนนเต็ม 20 = (rawTotalScore / 30) * 20
+  percentageScore: number; // ร้อยละความพึงพอใจ
   gradeLabel: string;
   gradeColor: 'emerald' | 'blue' | 'amber' | 'rose';
 }
 
 export function computeEvaluationScores(input: {
-  scorePoliteness: number;
-  scorePunctuality: number;
-  scoreEnthusiasm: number;
-  scoreProductKnowledge: number;
-  scoreConsultation: number;
-  scorePromotionUpdate: number;
-  scoreQuotationSpeed: number;
-  scoreFollowUp: number;
-  scoreProblemSolving: number;
-  scorePaymentTerms: number;
-}): ScoreBreakdown {
-  const serviceScore = (input.scorePoliteness || 5) + (input.scorePunctuality || 5) + (input.scoreEnthusiasm || 5);
-  const serviceAvg = Number((serviceScore / 3).toFixed(2));
+  q1_1_rating: number; // 0 - 5
+  q1_2_rating: number; // 0 - 5
+  q1_3_rating: number; // 0 - 5
+  q1_4_rating: number; // 0 - 5
 
-  const productScore = (input.scoreProductKnowledge || 5) + (input.scoreConsultation || 5) + (input.scorePromotionUpdate || 5);
-  const productAvg = Number((productScore / 3).toFixed(2));
+  q2_1_rating: number; // 0 - 5
+  q2_2_rating: number; // 0 - 5
 
-  const speedScore = (input.scoreQuotationSpeed || 5) + (input.scoreFollowUp || 5) + (input.scoreProblemSolving || 5);
-  const speedAvg = Number((speedScore / 3).toFixed(2));
+  q3_1_rating: number; // 0 - 5
+  q3_2_rating: number; // 0 - 5
+}): EvaluationScoreResults {
+  // ข้อ 1.1: เต็ม 10 คะแนน
+  const q1_1_score = Number(((Math.min(Math.max(input.q1_1_rating, 0), 5) / 5) * 10).toFixed(2));
+  // ข้อ 1.2: เต็ม 5 คะแนน
+  const q1_2_score = Number(((Math.min(Math.max(input.q1_2_rating, 0), 5) / 5) * 5).toFixed(2));
+  // ข้อ 1.3: เต็ม 2.5 คะแนน
+  const q1_3_score = Number(((Math.min(Math.max(input.q1_3_rating, 0), 5) / 5) * 2.5).toFixed(2));
+  // ข้อ 1.4: เต็ม 2.5 คะแนน
+  const q1_4_score = Number(((Math.min(Math.max(input.q1_4_rating, 0), 5) / 5) * 2.5).toFixed(2));
 
-  const paymentScore = input.scorePaymentTerms || 5;
-  const paymentAvg = Number(paymentScore.toFixed(2));
+  // หมวดที่ 1: เต็ม 20 คะแนน
+  const section1Score = Number((q1_1_score + q1_2_score + q1_3_score + q1_4_score).toFixed(2));
 
-  const totalScore = serviceScore + productScore + speedScore + paymentScore;
-  const maxScore = 50;
-  const averageScore = Number((totalScore / 10).toFixed(2));
-  const percentageScore = Math.round((totalScore / maxScore) * 100);
+  // ข้อ 2.1: เต็ม 2.5 คะแนน
+  const q2_1_score = Number(((Math.min(Math.max(input.q2_1_rating, 0), 5) / 5) * 2.5).toFixed(2));
+  // ข้อ 2.2: เต็ม 2.5 คะแนน
+  const q2_2_score = Number(((Math.min(Math.max(input.q2_2_rating, 0), 5) / 5) * 2.5).toFixed(2));
 
-  let gradeLabel = 'ยอดเยี่ยม (90-100%)';
+  // หมวดที่ 2: เต็ม 5 คะแนน
+  const section2Score = Number((q2_1_score + q2_2_score).toFixed(2));
+
+  // ข้อ 3.1: เต็ม 2.5 คะแนน
+  const q3_1_score = Number(((Math.min(Math.max(input.q3_1_rating, 0), 5) / 5) * 2.5).toFixed(2));
+  // ข้อ 3.2: เต็ม 2.5 คะแนน
+  const q3_2_score = Number(((Math.min(Math.max(input.q3_2_rating, 0), 5) / 5) * 2.5).toFixed(2));
+
+  // หมวดที่ 3: เต็ม 5 คะแนน
+  const section3Score = Number((q3_1_score + q3_2_score).toFixed(2));
+
+  // รวมคะแนนดิบ 3 หมวด (เต็ม 30)
+  const rawTotalScore = Number((section1Score + section2Score + section3Score).toFixed(2));
+
+  // ปรับอัตราส่วนคะแนนให้คิดเป็นคะแนนเต็ม 20 คะแนน (ตามที่ผู้ใช้ระบุ: "การประเมินนี้ จะแบ่งเป็นคะแนนเต็มคือ 20 คะแนน")
+  const scoreOutOf20 = Number(((rawTotalScore / 30) * 20).toFixed(2));
+  const percentageScore = Math.round((rawTotalScore / 30) * 100);
+
+  let gradeLabel = 'ดีมาก (18.0 - 20.0 คะแนน)';
   let gradeColor: 'emerald' | 'blue' | 'amber' | 'rose' = 'emerald';
 
-  if (percentageScore >= 90) {
-    gradeLabel = 'ยอดเยี่ยม (90-100%)';
+  if (scoreOutOf20 >= 18) {
+    gradeLabel = 'ดีมาก (18.0 - 20.0 คะแนน)';
     gradeColor = 'emerald';
-  } else if (percentageScore >= 80) {
-    gradeLabel = 'ดีมาก (80-89%)';
+  } else if (scoreOutOf20 >= 16) {
+    gradeLabel = 'ดี (16.0 - 17.9 คะแนน)';
     gradeColor = 'blue';
-  } else if (percentageScore >= 70) {
-    gradeLabel = 'ดี (70-79%)';
-    gradeColor = 'blue';
-  } else if (percentageScore >= 60) {
-    gradeLabel = 'ปานกลาง (60-69%)';
+  } else if (scoreOutOf20 >= 12) {
+    gradeLabel = 'ปานกลาง (12.0 - 15.9 คะแนน)';
     gradeColor = 'amber';
   } else {
-    gradeLabel = 'ต้องปรับปรุงเร่งด่วน (<60%)';
+    gradeLabel = 'ควรปรับปรุง (< 12.0 คะแนน)';
     gradeColor = 'rose';
   }
 
   return {
-    serviceScore,
-    serviceAvg,
-    productScore,
-    productAvg,
-    speedScore,
-    speedAvg,
-    paymentScore,
-    paymentAvg,
-    totalScore,
-    maxScore,
-    averageScore,
+    q1_1_score,
+    q1_2_score,
+    q1_3_score,
+    q1_4_score,
+    q2_1_score,
+    q2_2_score,
+    q3_1_score,
+    q3_2_score,
+    section1Score,
+    section2Score,
+    section3Score,
+    rawTotalScore,
+    scoreOutOf20,
     percentageScore,
     gradeLabel,
     gradeColor,
   };
 }
 
-export function formatChannelLabel(channel: SalesEvaluation['contactChannel']): string {
+export function formatChannelText(channel: 'onsite' | 'line' | 'phone'): string {
   switch (channel) {
-    case 'visit':
-      return '🚗 เข้าพบหน้าร้าน/หน้างาน';
-    case 'phone':
-      return '📞 โทรศัพท์ติดต่อ';
+    case 'onsite':
+      return '🚗 Onsite (เข้าพบหน้างานจริง)';
     case 'line':
-      return '💬 LINE Official / Chat';
-    case 'email':
-      return '✉️ อีเมล';
+      return '💬 Line';
+    case 'phone':
+      return '📞 โทรศัพท์';
     default:
-      return '🌐 ช่องทางอื่นๆ';
+      return 'Onsite';
   }
 }
 
-export function formatPriceComparisonLabel(comp: 'higher' | 'similar' | 'lower' | 'unknown'): {
+export function formatPriceComparisonLabel(opt?: PriceComparisonOption | string | null): {
   label: string;
   badgeClass: string;
 } {
-  switch (comp) {
+  switch (opt) {
     case 'lower':
       return {
-        label: 'ถูกกว่าคู่แข่ง (ได้เปรียบ)',
+        label: 'ต่ำกว่า',
         badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300',
       };
     case 'similar':
       return {
-        label: 'ใกล้เคียงคู่แข่ง',
+        label: 'ใกล้เคียง',
         badgeClass: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300',
       };
     case 'higher':
       return {
-        label: 'สูงกว่าคู่แข่ง',
+        label: 'สูงกว่า',
         badgeClass: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300',
+      };
+    case 'uncertain':
+    case 'unknown':
+      return {
+        label: 'ไม่แน่ใจ',
+        badgeClass: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300',
+      };
+    case 'undisclosed':
+      return {
+        label: 'ไม่สามารถเปิดเผยได้',
+        badgeClass: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300',
       };
     default:
       return {
-        label: 'ไม่แน่ใจ / ไม่ระบุ',
+        label: 'ใกล้เคียง',
         badgeClass: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300',
       };
   }
 }
 
-export function formatFutureIntent(intent: SalesEvaluation['futurePurchaseIntent']): {
-  label: string;
-  icon: string;
-  color: string;
-} {
-  switch (intent) {
-    case 'continuous':
-      return {
-        label: 'ยินดีสั่งซื้อต่อเนื่อง 100%',
-        icon: '✅',
-        color: 'text-emerald-600 dark:text-emerald-400',
-      };
-    case 'compare_case_by_case':
-      return {
-        label: 'เปรียบเทียบโปรโมชั่น/ราคาเป็นครั้งคราว',
-        icon: '⚖️',
-        color: 'text-blue-600 dark:text-blue-400',
-      };
-    case 'pause':
-      return {
-        label: 'ชะลอการสั่งซื้อชั่วคราว',
-        icon: '⏸️',
-        color: 'text-amber-600 dark:text-amber-400',
-      };
-    case 'no':
-      return {
-        label: 'ยังไม่มีแผนการสั่งซื้อ',
-        icon: '❌',
-        color: 'text-rose-600 dark:text-rose-400',
-      };
+// 🛡️ ฟังก์ชันปรับข้อมูลแบบประเมินให้รองรับ Schema ล่าสุดและป้องกัน Error จากข้อมูลเก่าใน LocalStorage
+export function normalizeEvaluation(item: any): any {
+  if (!item) return null;
+
+  const feedbackPrice =
+    item.feedbackPriceAndPromo ||
+    (item.overallPriceComparison === 'lower'
+      ? 'lower'
+      : item.overallPriceComparison === 'higher'
+      ? 'higher'
+      : 'similar');
+
+  const channel =
+    item.contactChannel === 'phone' || item.contactChannel === 'line' || item.contactChannel === 'onsite'
+      ? item.contactChannel
+      : 'onsite';
+
+  let scoreOutOf20 = item.scoreOutOf20;
+  let rawTotalScore = item.rawTotalScore;
+  let section1Score = item.section1Score;
+  let section2Score = item.section2Score;
+  let section3Score = item.section3Score;
+  let percentageScore = item.percentageScore;
+
+  if (scoreOutOf20 === undefined || rawTotalScore === undefined) {
+    if (item.q1_1_rating !== undefined) {
+      const scores = computeEvaluationScores({
+        q1_1_rating: item.q1_1_rating ?? 5,
+        q1_2_rating: item.q1_2_rating ?? 5,
+        q1_3_rating: item.q1_3_rating ?? 5,
+        q1_4_rating: item.q1_4_rating ?? 5,
+        q2_1_rating: item.q2_1_rating ?? 5,
+        q2_2_rating: item.q2_2_rating ?? 5,
+        q3_1_rating: item.q3_1_rating ?? 5,
+        q3_2_rating: item.q3_2_rating ?? 5,
+      });
+      scoreOutOf20 = scores.scoreOutOf20;
+      rawTotalScore = scores.rawTotalScore;
+      section1Score = scores.section1Score;
+      section2Score = scores.section2Score;
+      section3Score = scores.section3Score;
+      percentageScore = scores.percentageScore;
+    } else {
+      const legacyAvg = item.averageScore || 4.5;
+      scoreOutOf20 = Number(((legacyAvg / 5) * 20).toFixed(2));
+      rawTotalScore = Number(((legacyAvg / 5) * 30).toFixed(2));
+      section1Score = Number(((legacyAvg / 5) * 20).toFixed(2));
+      section2Score = Number(((legacyAvg / 5) * 5).toFixed(2));
+      section3Score = Number(((legacyAvg / 5) * 5).toFixed(2));
+      percentageScore = Math.round((legacyAvg / 5) * 100);
+    }
   }
+
+  return {
+    ...item,
+    contactChannel: channel,
+    feedbackPriceAndPromo: feedbackPrice,
+    q1_1_rating: item.q1_1_rating ?? 5,
+    q1_1_score: item.q1_1_score ?? 10,
+    q1_1_note: item.q1_1_note || '',
+    q1_2_rating: item.q1_2_rating ?? 5,
+    q1_2_score: item.q1_2_score ?? 5,
+    q1_2_note: item.q1_2_note || '',
+    q1_3_rating: item.q1_3_rating ?? 5,
+    q1_3_score: item.q1_3_score ?? 2.5,
+    q1_3_note: item.q1_3_note || '',
+    q1_4_rating: item.q1_4_rating ?? 5,
+    q1_4_score: item.q1_4_score ?? 2.5,
+    q1_4_note: item.q1_4_note || '',
+    q2_1_rating: item.q2_1_rating ?? 5,
+    q2_1_score: item.q2_1_score ?? 2.5,
+    q2_1_note: item.q2_1_note || '',
+    q2_2_rating: item.q2_2_rating ?? 5,
+    q2_2_score: item.q2_2_score ?? 2.5,
+    q2_2_note: item.q2_2_note || '',
+    q3_1_rating: item.q3_1_rating ?? 5,
+    q3_1_score: item.q3_1_score ?? 2.5,
+    q3_1_note: item.q3_1_note || '',
+    q3_2_rating: item.q3_2_rating ?? 5,
+    q3_2_score: item.q3_2_score ?? 2.5,
+    q3_2_note: item.q3_2_note || '',
+    section1Score: section1Score ?? 20,
+    section2Score: section2Score ?? 5,
+    section3Score: section3Score ?? 5,
+    rawTotalScore: rawTotalScore ?? 30,
+    scoreOutOf20: scoreOutOf20 ?? 20,
+    percentageScore: percentageScore ?? 100,
+    gradeLabel: item.gradeLabel || 'ดีมาก (18.0 - 20.0 คะแนน)',
+    gradeColor: item.gradeColor || 'emerald',
+    competitorPriceItems: item.competitorPriceItems || [],
+    interestedProducts: item.interestedProducts || [],
+    additionalFeedback: item.additionalFeedback || item.strengthsFeedback || '',
+  };
 }

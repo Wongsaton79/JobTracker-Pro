@@ -51,7 +51,7 @@ export const SalesEvaluationView: React.FC<SalesEvaluationViewProps> = ({
       actionLabel: 'บันทึกแบบประเมินทีมขาย',
       jobCode: evaluation.jobCode,
       jobTitle: evaluation.projectName || evaluation.customerName,
-      details: `บันทึกแบบประเมินทีมขาย "${evaluation.salesRepName}" คะแนนเฉลี่ย ${evaluation.averageScore}/5.0 (${evaluation.percentageScore}%)`,
+      details: `บันทึกแบบประเมินทีมขาย "${evaluation.salesRepName}" คะแนนเต็ม 20 ได้ ${evaluation.scoreOutOf20}/20 คะแนน (${evaluation.percentageScore}%)`,
     });
 
     if (sendLine) {
@@ -80,7 +80,7 @@ export const SalesEvaluationView: React.FC<SalesEvaluationViewProps> = ({
         actionLabel: 'ส่งผลประเมินเข้า LINE',
         jobCode: evaluation.jobCode,
         jobTitle: evaluation.projectName || evaluation.customerName,
-        details: `ส่งสรุปคะแนนประเมินทีมขาย "${evaluation.salesRepName}" (${evaluation.averageScore}/5.0) เข้า LINE Group`,
+        details: `ส่งสรุปคะแนนประเมินทีมขาย "${evaluation.salesRepName}" (${evaluation.scoreOutOf20}/20 คะแนน) เข้า LINE Group`,
       });
     } else {
       showToast(lineRes.message, 'error');

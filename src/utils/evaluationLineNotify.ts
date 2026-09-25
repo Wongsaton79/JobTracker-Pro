@@ -1,5 +1,5 @@
 import { SalesEvaluation, SyncSettings } from '../types';
-import { formatChannelLabel, formatPriceComparisonLabel, formatFutureIntent } from './evaluationCalculator';
+import { formatChannelText, formatPriceComparisonLabel } from './evaluationCalculator';
 
 export async function sendEvaluationToLine(
   evaluation: SalesEvaluation,
@@ -16,9 +16,8 @@ export async function sendEvaluationToLine(
       };
     }
 
-    const priceInfo = formatPriceComparisonLabel(evaluation.overallPriceComparison);
-    const intentInfo = formatFutureIntent(evaluation.futurePurchaseIntent);
-    const channelText = formatChannelLabel(evaluation.contactChannel);
+    const priceInfo = formatPriceComparisonLabel(evaluation.feedbackPriceAndPromo);
+    const channelText = formatChannelText(evaluation.contactChannel);
 
     // Flex Bubble payload
     const flexBubble = {
@@ -27,15 +26,16 @@ export async function sendEvaluationToLine(
       header: {
         type: 'box',
         layout: 'vertical',
-        backgroundColor: '#059669', // Emerald
+        backgroundColor: '#059669',
         paddingAll: '16px',
         contents: [
           {
             type: 'text',
-            text: '⭐ แบบประเมินความพึงพอใจทีมขาย',
+            text: '⭐ แบบประเมินความพึงพอใจการทำงานของทีมขาย',
             color: '#ffffff',
             weight: 'bold',
             size: 'md',
+            wrap: true,
           },
           {
             type: 'text',
@@ -51,7 +51,7 @@ export async function sendEvaluationToLine(
         layout: 'vertical',
         spacing: 'md',
         contents: [
-          // Score Highlight Box
+          // Score Highlight Box (เต็ม 20 คะแนน)
           {
             type: 'box',
             layout: 'horizontal',
@@ -66,22 +66,28 @@ export async function sendEvaluationToLine(
                 contents: [
                   {
                     type: 'text',
-                    text: 'คะแนนความพึงพอใจ',
+                    text: 'คะแนนการประเมิน (เต็ม 20 คะแนน)',
                     size: 'xs',
                     color: '#065f46',
                   },
                   {
                     type: 'text',
-                    text: `${evaluation.averageScore} / 5.0 (${evaluation.percentageScore}%)`,
-                    size: 'lg',
+                    text: `${evaluation.scoreOutOf20} / 20.00 (${evaluation.percentageScore}%)`,
+                    size: 'xl',
                     weight: 'bold',
                     color: '#047857',
+                  },
+                  {
+                    type: 'text',
+                    text: `คะแนนดิบ 3 หมวด: ${evaluation.rawTotalScore} / 30 คะแนน`,
+                    size: 'xxs',
+                    color: '#059669',
                   },
                 ],
               },
               {
                 type: 'text',
-                text: evaluation.gradeLabel.split(' ')[0] || 'ยอดเยี่ยม',
+                text: evaluation.gradeLabel.split(' ')[0] || 'ดีมาก',
                 size: 'xs',
                 color: '#ffffff',
                 weight: 'bold',
@@ -90,6 +96,35 @@ export async function sendEvaluationToLine(
                 backgroundColor: '#10b981',
                 cornerRadius: 'xxl',
                 paddingAll: '4px',
+              },
+            ],
+          },
+          // Section Breakdown
+          {
+            type: 'box',
+            layout: 'vertical',
+            spacing: 'xs',
+            backgroundColor: '#f8fafc',
+            cornerRadius: 'sm',
+            paddingAll: '8px',
+            contents: [
+              {
+                type: 'text',
+                text: `1. การสื่อสารและการบริการ: ${evaluation.section1Score} / 20 คะแนน`,
+                size: 'xxs',
+                color: '#334155',
+              },
+              {
+                type: 'text',
+                text: `2. การรับผิดชอบในหน้าที่: ${evaluation.section2Score} / 5 คะแนน`,
+                size: 'xxs',
+                color: '#334155',
+              },
+              {
+                type: 'text',
+                text: `3. ความประทับใจ: ${evaluation.section3Score} / 5 คะแนน`,
+                size: 'xxs',
+                color: '#334155',
               },
             ],
           },
@@ -111,7 +146,7 @@ export async function sendEvaluationToLine(
                 type: 'box',
                 layout: 'horizontal',
                 contents: [
-                  { type: 'text', text: 'ลูกค้า/ร้านค้า:', size: 'xs', color: '#64748b', flex: 3 },
+                  { type: 'text', text: 'ร้านค้า/ลูกค้า:', size: 'xs', color: '#64748b', flex: 3 },
                   { type: 'text', text: evaluation.customerName, size: 'xs', weight: 'bold', color: '#0f172a', flex: 6, wrap: true },
                 ],
               },
@@ -119,15 +154,7 @@ export async function sendEvaluationToLine(
                 type: 'box',
                 layout: 'horizontal',
                 contents: [
-                  { type: 'text', text: 'วันที่ประเมิน:', size: 'xs', color: '#64748b', flex: 3 },
-                  { type: 'text', text: evaluation.date, size: 'xs', color: '#334155', flex: 6 },
-                ],
-              },
-              {
-                type: 'box',
-                layout: 'horizontal',
-                contents: [
-                  { type: 'text', text: 'ช่องทางเข้าพบ:', size: 'xs', color: '#64748b', flex: 3 },
+                  { type: 'text', text: 'ช่องทางให้ข้อมูล:', size: 'xs', color: '#64748b', flex: 3 },
                   { type: 'text', text: channelText, size: 'xs', color: '#334155', flex: 6 },
                 ],
               },
@@ -135,31 +162,23 @@ export async function sendEvaluationToLine(
                 type: 'box',
                 layout: 'horizontal',
                 contents: [
-                  { type: 'text', text: 'ระดับราคาตลาด:', size: 'xs', color: '#64748b', flex: 3 },
+                  { type: 'text', text: 'ราคากับคู่แข่ง:', size: 'xs', color: '#64748b', flex: 3 },
                   { type: 'text', text: priceInfo.label, size: 'xs', weight: 'bold', color: '#0f172a', flex: 6 },
-                ],
-              },
-              {
-                type: 'box',
-                layout: 'horizontal',
-                contents: [
-                  { type: 'text', text: 'การสั่งซื้อต่อไป:', size: 'xs', color: '#64748b', flex: 3 },
-                  { type: 'text', text: intentInfo.label, size: 'xs', color: '#0f172a', flex: 6, wrap: true },
                 ],
               },
             ],
           },
-          // Feedback comment if any
-          evaluation.strengthsFeedback
+          // Additional Feedback note
+          evaluation.additionalFeedback
             ? {
                 type: 'box',
                 layout: 'vertical',
-                backgroundColor: '#f8fafc',
+                backgroundColor: '#fffbeb',
                 cornerRadius: 'sm',
                 paddingAll: '8px',
                 contents: [
-                  { type: 'text', text: '💬 สิ่งที่ประทับใจ:', size: 'xxs', color: '#64748b', weight: 'bold' },
-                  { type: 'text', text: evaluation.strengthsFeedback, size: 'xs', color: '#334155', wrap: true },
+                  { type: 'text', text: '💬 ข้อเสนอแนะเพิ่มเติม:', size: 'xxs', color: '#92400e', weight: 'bold' },
+                  { type: 'text', text: evaluation.additionalFeedback, size: 'xs', color: '#78350f', wrap: true },
                 ],
               }
             : { type: 'separator' },
@@ -172,7 +191,7 @@ export async function sendEvaluationToLine(
         contents: [
           {
             type: 'text',
-            text: `ผู้ประเมิน: ${evaluation.evaluatorName || 'ลูกค้า'} • ลดการใช้กระดาษ (Digital 100%)`,
+            text: `ผู้ให้ข้อมูล: ${evaluation.evaluatorName || 'ร้านค้า'} • 100% Digital Paperless`,
             size: 'xxs',
             color: '#94a3b8',
             align: 'center',
@@ -183,7 +202,7 @@ export async function sendEvaluationToLine(
 
     const flexPayload = {
       type: 'flex',
-      altText: `⭐ ผลการประเมินทีมขาย: ${evaluation.salesRepName} (${evaluation.averageScore}/5.0)`,
+      altText: `⭐ ผลการประเมินทีมขาย: ${evaluation.salesRepName} (${evaluation.scoreOutOf20}/20 คะแนน)`,
       contents: flexBubble,
     };
 
@@ -215,7 +234,7 @@ export async function sendEvaluationToLine(
 
     return {
       success: true,
-      message: `ส่งผลการประเมินรหัส ${evaluation.evaluationCode} เข้ากลุ่ม LINE เรียบร้อยแล้ว`,
+      message: `ส่งผลการประเมินรหัส ${evaluation.evaluationCode} (${evaluation.scoreOutOf20}/20 คะแนน) เข้า LINE เรียบร้อยแล้ว`,
     };
   } catch (err: any) {
     return {
