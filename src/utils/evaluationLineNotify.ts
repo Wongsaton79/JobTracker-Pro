@@ -1,37 +1,86 @@
 import { SalesEvaluation, SyncSettings } from '../types';
 import { formatChannelText, formatPriceComparisonLabel } from './evaluationCalculator';
+import { uploadBase64ToPublicCdn } from './imageCdn';
 
+export const DEFAULT_LINE_CONFIG = {
+  channelAccessToken:
+    'JOdpOQkd0rtaYfPfGVLwZj9LMshtp010Hgb5DsM9HmRmtDWqrSJFTVjXLd6mLmhS3bCmWfTIKeHkC3yhWVMGXKP/R7HhnWEizWvqnxi8EWa/jMVUKxz1mck/P+8/LvTaHJl/Fpq0P7Okf547iIlW2wdB04t89/1O/w1cDnyilFU=',
+  targetGroupId: 'C341417bcb6e853c320eaf9d80963cda3',
+};
+
+/**
+ * ส่งข้อมูลการเข้าพบเก็บแบบสอบถามความพึงพอใจเข้า LINE Group
+ * ⚠️ ตามนโยบาย: ส่งข้อมูลหน้างาน ร้านค้า พิกัด และ Feedback ทั้งหมด "ยกเว้น คะแนนการประเมิน"
+ */
 export async function sendEvaluationToLine(
   evaluation: SalesEvaluation,
   settings: SyncSettings
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const token = settings.lineChannelAccessToken;
-    const targetId = settings.lineTargetGroupId || settings.lineTargetUserId;
+    const token = (settings.lineChannelAccessToken || DEFAULT_LINE_CONFIG.channelAccessToken).trim();
+    const targetId = (settings.lineTargetGroupId || settings.lineTargetUserId || DEFAULT_LINE_CONFIG.targetGroupId).trim();
 
     if (!token || !targetId) {
       return {
         success: false,
-        message: 'กรุณาตั้งค่า LINE Channel Access Token และ Target ID ในเมนูตั้งค่าก่อน',
+        message: 'กรุณาตั้งค่า LINE Channel Access Token และ Target Group ID ก่อนส่งข้อมูล',
       };
     }
 
     const priceInfo = formatPriceComparisonLabel(evaluation.feedbackPriceAndPromo);
     const channelText = formatChannelText(evaluation.contactChannel);
+    const branchText = evaluation.branch === 'แม่สอด' ? 'สาขา แม่สอด' : 'สาขา ตาก';
 
-    // Flex Bubble payload
-    const flexBubble = {
+    const locationText = evaluation.checkInLocation
+      ? (evaluation.checkInLocation.address || `${evaluation.checkInLocation.lat.toFixed(5)}, ${evaluation.checkInLocation.lng.toFixed(5)}`)
+      : 'ไม่ได้ระบุพิกัด GPS';
+
+    const googleMapsUrl = evaluation.checkInLocation
+      ? `https://www.google.com/maps?q=${evaluation.checkInLocation.lat},${evaluation.checkInLocation.lng}`
+      : '';
+
+    // Convert photos to public CDN URLs if available
+    const publicPhotoUrls: string[] = [];
+    if (evaluation.photos && evaluation.photos.length > 0) {
+      for (const p of evaluation.photos.slice(0, 4)) {
+        try {
+          if (p.startsWith('https://')) {
+            publicPhotoUrls.push(p);
+          } else if (p.startsWith('data:image')) {
+            const uploadedUrl = await uploadBase64ToPublicCdn(p);
+            if (uploadedUrl && uploadedUrl.startsWith('https://')) {
+              publicPhotoUrls.push(uploadedUrl);
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to upload evaluation photo to CDN:', e);
+        }
+      }
+    }
+
+    // Competitor Price Items list (up to 5 items)
+    const validCompetitorItems = (evaluation.competitorPriceItems || []).filter(
+      (i) => i.productName && i.productName.trim() !== ''
+    );
+
+    // Interested Products list
+    const validInterestedProducts = (evaluation.interestedProducts || []).filter(
+      (p) => p && p.trim() !== ''
+    );
+
+    // Flex Bubble payload (ออกแบบตามแบบจริงใน LINE - การ์ดสีเขียว ชัดเจน สวยงาม ไม่มีคะแนน)
+    const flexBubble: any = {
       type: 'bubble',
       size: 'mega',
       header: {
         type: 'box',
         layout: 'vertical',
-        backgroundColor: '#059669',
+        backgroundColor: '#16a34a',
         paddingAll: '16px',
         contents: [
           {
             type: 'text',
-            text: '⭐ แบบประเมินความพึงพอใจการทำงานของทีมขาย',
+            text: `${evaluation.customerName} เข้าพบเก็บแบบสอบถามความพึงพอใจ`,
             color: '#ffffff',
             weight: 'bold',
             size: 'md',
@@ -39,8 +88,8 @@ export async function sendEvaluationToLine(
           },
           {
             type: 'text',
-            text: `${settings.companyName || 'JobTracker Pro'} • รหัส ${evaluation.evaluationCode}`,
-            color: '#a7f3d0',
+            text: `👤 พนักงานขาย: ${evaluation.salesRepName} • ${branchText}`,
+            color: '#bbf7d0',
             size: 'xs',
             margin: 'xs',
           },
@@ -49,189 +98,207 @@ export async function sendEvaluationToLine(
       body: {
         type: 'box',
         layout: 'vertical',
-        spacing: 'md',
+        spacing: 'sm',
+        paddingAll: '16px',
         contents: [
-          // Score Highlight Box (เต็ม 30 คะแนน)
+          // พิกัด / ที่อยู่หน้างาน
           {
             type: 'box',
             layout: 'horizontal',
-            backgroundColor: '#ecfdf5',
-            cornerRadius: 'md',
-            paddingAll: '12px',
-            alignItems: 'center',
+            spacing: 'sm',
             contents: [
               {
-                type: 'box',
-                layout: 'vertical',
-                contents: [
-                  {
-                    type: 'text',
-                    text: 'คะแนนการประเมิน (เต็ม 30 คะแนน)',
-                    size: 'xs',
-                    color: '#065f46',
-                  },
-                  {
-                    type: 'text',
-                    text: `${evaluation.totalScore ?? evaluation.rawTotalScore ?? 30} / 30.00 (${evaluation.percentageScore}%)`,
-                    size: 'xl',
-                    weight: 'bold',
-                    color: '#047857',
-                  },
-                  {
-                    type: 'text',
-                    text: `1. สื่อสาร ${evaluation.section1Score}/20 • 2. รับผิดชอบ ${evaluation.section2Score}/5 • 3. ประทับใจ ${evaluation.section3Score}/5`,
-                    size: 'xxs',
-                    color: '#059669',
-                  },
-                ],
+                type: 'text',
+                text: '📍',
+                size: 'xs',
+                flex: 1,
               },
               {
                 type: 'text',
-                text: evaluation.gradeLabel.split(' ')[0] || 'ดีมาก',
+                text: locationText,
                 size: 'xs',
-                color: '#ffffff',
+                color: '#334155',
                 weight: 'bold',
-                align: 'center',
-                gravity: 'center',
-                backgroundColor: '#10b981',
-                cornerRadius: 'xxl',
-                paddingAll: '4px',
+                wrap: true,
+                flex: 11,
               },
             ],
           },
-          // Section Breakdown
+          {
+            type: 'separator',
+            margin: 'md',
+          },
+          // ข้อมูลการเข้าพบ
           {
             type: 'box',
             layout: 'vertical',
             spacing: 'xs',
-            backgroundColor: '#f8fafc',
-            cornerRadius: 'sm',
-            paddingAll: '8px',
-            contents: [
-              {
-                type: 'text',
-                text: `1. การสื่อสารและการบริการ: ${evaluation.section1Score} / 20 คะแนน`,
-                size: 'xxs',
-                color: '#334155',
-              },
-              {
-                type: 'text',
-                text: `2. การรับผิดชอบในหน้าที่: ${evaluation.section2Score} / 5 คะแนน`,
-                size: 'xxs',
-                color: '#334155',
-              },
-              {
-                type: 'text',
-                text: `3. ความประทับใจ: ${evaluation.section3Score} / 5 คะแนน`,
-                size: 'xxs',
-                color: '#334155',
-              },
-            ],
-          },
-          // Key details
-          {
-            type: 'box',
-            layout: 'vertical',
-            spacing: 'sm',
+            margin: 'md',
             contents: [
               {
                 type: 'box',
                 layout: 'horizontal',
                 contents: [
-                  { type: 'text', text: 'สาขา:', size: 'xs', color: '#64748b', flex: 3 },
-                  { type: 'text', text: evaluation.branch === 'แม่สอด' ? 'สาขา แม่สอด' : 'สาขา ตาก', size: 'xs', weight: 'bold', color: '#047857', flex: 6 },
-                ],
-              },
-              {
-                type: 'box',
-                layout: 'horizontal',
-                contents: [
-                  { type: 'text', text: 'พนักงานขาย:', size: 'xs', color: '#64748b', flex: 3 },
-                  { type: 'text', text: evaluation.salesRepName, size: 'xs', weight: 'bold', color: '#0f172a', flex: 6 },
-                ],
-              },
-              {
-                type: 'box',
-                layout: 'horizontal',
-                contents: [
-                  { type: 'text', text: 'ร้านค้า/ลูกค้า:', size: 'xs', color: '#64748b', flex: 3 },
-                  { type: 'text', text: evaluation.customerName, size: 'xs', weight: 'bold', color: '#0f172a', flex: 6, wrap: true },
-                ],
-              },
-              {
-                type: 'box',
-                layout: 'horizontal',
-                contents: [
-                  { type: 'text', text: 'ผู้ให้ข้อมูล/เบอร์:', size: 'xs', color: '#64748b', flex: 3 },
-                  { type: 'text', text: evaluation.evaluatorName || '-', size: 'xs', color: '#0f172a', flex: 6, wrap: true },
-                ],
-              },
-              {
-                type: 'box',
-                layout: 'horizontal',
-                contents: [
-                  { type: 'text', text: 'ช่องทางให้ข้อมูล:', size: 'xs', color: '#64748b', flex: 3 },
-                  { type: 'text', text: channelText, size: 'xs', color: '#334155', flex: 6 },
-                ],
-              },
-              {
-                type: 'box',
-                layout: 'horizontal',
-                contents: [
-                  { type: 'text', text: 'ราคากับคู่แข่ง:', size: 'xs', color: '#64748b', flex: 3 },
-                  { type: 'text', text: priceInfo.label, size: 'xs', weight: 'bold', color: '#0f172a', flex: 6 },
-                ],
-              },
-              evaluation.checkInLocation
-                ? {
-                    type: 'box',
-                    layout: 'horizontal',
-                    contents: [
-                      { type: 'text', text: 'Check-in:', size: 'xs', color: '#64748b', flex: 3 },
-                      {
-                        type: 'text',
-                        text: `${evaluation.checkInLocation.distanceKm} กม. (${evaluation.checkInLocation.isWithinRange ? 'ไม่เกิน 5 กม.' : 'เกิน 5 กม.'})`,
-                        size: 'xs',
-                        weight: 'bold',
-                        color: evaluation.checkInLocation.isWithinRange ? '#047857' : '#d97706',
-                        flex: 6,
-                      },
-                    ],
-                  }
-                : {
-                    type: 'box',
-                    layout: 'horizontal',
-                    contents: [
-                      { type: 'text', text: 'Check-in:', size: 'xs', color: '#64748b', flex: 3 },
-                      { type: 'text', text: 'ไม่ได้ระบุพิกัด', size: 'xs', color: '#94a3b8', flex: 6 },
-                    ],
+                  { type: 'text', text: '👤 ผู้ให้ข้อมูล:', size: 'xs', color: '#64748b', flex: 4 },
+                  {
+                    type: 'text',
+                    text: `${evaluation.evaluatorName || '-'}${evaluation.customerPhone ? ` (${evaluation.customerPhone})` : ''}`,
+                    size: 'xs',
+                    color: '#0f172a',
+                    weight: 'bold',
+                    flex: 7,
+                    wrap: true,
                   },
+                ],
+              },
+              {
+                type: 'box',
+                layout: 'horizontal',
+                contents: [
+                  { type: 'text', text: '📞 ช่องทาง:', size: 'xs', color: '#64748b', flex: 4 },
+                  { type: 'text', text: channelText, size: 'xs', color: '#334155', flex: 7 },
+                ],
+              },
+              {
+                type: 'box',
+                layout: 'horizontal',
+                contents: [
+                  { type: 'text', text: '📅 วันที่เข้าพบ:', size: 'xs', color: '#64748b', flex: 4 },
+                  { type: 'text', text: evaluation.date || '-', size: 'xs', color: '#334155', flex: 7 },
+                ],
+              },
+              {
+                type: 'box',
+                layout: 'horizontal',
+                contents: [
+                  { type: 'text', text: '🏷️ ราคากับคู่แข่ง:', size: 'xs', color: '#64748b', flex: 4 },
+                  {
+                    type: 'text',
+                    text: `${priceInfo.label}${evaluation.feedbackPriceNote ? ` (${evaluation.feedbackPriceNote})` : ''}`,
+                    size: 'xs',
+                    weight: 'bold',
+                    color: '#047857',
+                    flex: 7,
+                    wrap: true,
+                  },
+                ],
+              },
             ],
           },
-          // Additional Feedback note
-          evaluation.additionalFeedback
-            ? {
-                type: 'box',
-                layout: 'vertical',
-                backgroundColor: '#fffbeb',
-                cornerRadius: 'sm',
-                paddingAll: '8px',
-                contents: [
-                  { type: 'text', text: '💬 ข้อเสนอแนะเพิ่มเติม:', size: 'xxs', color: '#92400e', weight: 'bold' },
-                  { type: 'text', text: evaluation.additionalFeedback, size: 'xs', color: '#78350f', wrap: true },
-                ],
-              }
-            : { type: 'separator' },
+
+          // รายการสินค้าคู่แข่งที่เก็บราคา (ถ้ามี)
+          ...(validCompetitorItems.length > 0
+            ? [
+                {
+                  type: 'box',
+                  layout: 'vertical',
+                  margin: 'md',
+                  paddingAll: '8px',
+                  backgroundColor: '#f8fafc',
+                  cornerRadius: 'md',
+                  contents: [
+                    {
+                      type: 'text',
+                      text: `📋 รายการราคาสินค้าคู่แข่ง (${validCompetitorItems.length} รายการ):`,
+                      size: 'xxs',
+                      color: '#475569',
+                      weight: 'bold',
+                    },
+                    ...validCompetitorItems.slice(0, 4).map((item, idx) => ({
+                      type: 'text',
+                      text: `${idx + 1}. ${item.productName} [${item.comparison === 'lower' ? 'ต่ำกว่า' : item.comparison === 'higher' ? 'สูงกว่า' : item.comparison === 'similar' ? 'ใกล้เคียง' : 'เทียบราคา'}]${item.note ? ` - ${item.note}` : ''}`,
+                      size: 'xxs',
+                      color: '#334155',
+                      wrap: true,
+                    })),
+                  ],
+                },
+              ]
+            : []),
+
+          // สินค้าที่สนใจให้ทำราคา (ถ้ามี)
+          ...(validInterestedProducts.length > 0
+            ? [
+                {
+                  type: 'box',
+                  layout: 'vertical',
+                  margin: 'sm',
+                  paddingAll: '8px',
+                  backgroundColor: '#f0fdf4',
+                  cornerRadius: 'md',
+                  contents: [
+                    {
+                      type: 'text',
+                      text: '💡 สินค้าที่ลูกค้าสนใจให้ทำราคา:',
+                      size: 'xxs',
+                      color: '#166534',
+                      weight: 'bold',
+                    },
+                    ...validInterestedProducts.slice(0, 3).map((item, idx) => ({
+                      type: 'text',
+                      text: `• ${item}`,
+                      size: 'xxs',
+                      color: '#15803d',
+                      wrap: true,
+                    })),
+                  ],
+                },
+              ]
+            : []),
+
+          // ข้อเสนอแนะเพิ่มเติม (ถ้ามี)
+          ...(evaluation.additionalFeedback
+            ? [
+                {
+                  type: 'box',
+                  layout: 'vertical',
+                  margin: 'sm',
+                  paddingAll: '8px',
+                  backgroundColor: '#fffbeb',
+                  cornerRadius: 'md',
+                  contents: [
+                    {
+                      type: 'text',
+                      text: '💬 ข้อเสนอแนะเพิ่มเติม:',
+                      size: 'xxs',
+                      color: '#92400e',
+                      weight: 'bold',
+                    },
+                    {
+                      type: 'text',
+                      text: evaluation.additionalFeedback,
+                      size: 'xs',
+                      color: '#78350f',
+                      wrap: true,
+                    },
+                  ],
+                },
+              ]
+            : []),
         ],
       },
       footer: {
         type: 'box',
         layout: 'vertical',
-        spacing: 'sm',
+        spacing: 'xs',
         contents: [
+          ...(googleMapsUrl
+            ? [
+                {
+                  type: 'button',
+                  style: 'link',
+                  height: 'sm',
+                  action: {
+                    type: 'uri',
+                    label: '📍 ดูแผนที่หน้างาน Google Maps',
+                    uri: googleMapsUrl,
+                  },
+                },
+              ]
+            : []),
           {
             type: 'text',
-            text: `ผู้ให้ข้อมูล / เบอร์ติดต่อ: ${evaluation.evaluatorName || 'ร้านค้า'} • 100% Digital Paperless`,
+            text: `รหัสแบบประเมิน: ${evaluation.evaluationCode} • ${settings.companyName || 'ระบบบันทึกงานขาย'}`,
             size: 'xxs',
             color: '#94a3b8',
             align: 'center',
@@ -240,41 +307,99 @@ export async function sendEvaluationToLine(
       },
     };
 
+    // First message: The Flex Bubble
     const flexPayload = {
       type: 'flex',
-      altText: `⭐ ผลการประเมินทีมขาย: ${evaluation.salesRepName} (${evaluation.totalScore ?? evaluation.rawTotalScore ?? 30}/30 คะแนน)`,
+      altText: `📋 เข้าพบเก็บแบบสอบถามความพึงพอใจ: ${evaluation.customerName} (พนักงาน: ${evaluation.salesRepName})`,
       contents: flexBubble,
     };
 
-    const endpoint = settings.lineRelayUrl?.trim() || '/api/line-relay';
-    const body = {
+    const messagesToSend: any[] = [flexPayload];
+
+    // Additional messages: Direct photos if available on public CDN (up to 4 images)
+    for (const imgUrl of publicPhotoUrls) {
+      if (messagesToSend.length < 5) {
+        messagesToSend.push({
+          type: 'image',
+          originalContentUrl: imgUrl,
+          previewImageUrl: imgUrl,
+        });
+      }
+    }
+
+    const requestBody = {
       channelAccessToken: token,
       to: targetId,
       targetId: targetId,
-      messages: [flexPayload],
-      payload: [flexPayload],
+      messages: messagesToSend,
+      payload: messagesToSend,
     };
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      return {
-        success: false,
-        message: `ส่ง LINE ไม่สำเร็จ (${response.status}): ${errText}`,
-      };
+    // Candidate endpoints
+    const endpoints: string[] = [];
+    if (settings.lineRelayUrl && settings.lineRelayUrl.trim().startsWith('http')) {
+      endpoints.push(settings.lineRelayUrl.trim());
+    }
+    endpoints.push('/api/line-relay');
+    endpoints.push('/api/sync/send-evaluation-line');
+    if (typeof window !== 'undefined' && window.location.origin) {
+      endpoints.push(`${window.location.origin}/api/line-relay`);
     }
 
+    let lastError = '';
+    for (const ep of endpoints) {
+      try {
+        const response = await fetch(ep, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (response.ok) {
+          return {
+            success: true,
+            message: `ส่งข้อมูลการเข้าพบร้าน "${evaluation.customerName}" เข้า LINE เรียบร้อยแล้ว`,
+          };
+        }
+
+        const errText = await response.text();
+        lastError = errText;
+      } catch (err: any) {
+        lastError = err.message || String(err);
+      }
+    }
+
+    // Text fallback attempt in case Flex had issues
+    try {
+      const fallbackText = `📋 ข้อมูลเข้าพบเก็บแบบสอบถามความพึงพอใจ\n🏪 ร้านค้า/ลูกค้า: ${evaluation.customerName}\n👤 พนักงานขาย: ${evaluation.salesRepName} (${branchText})\n👥 ผู้ให้ข้อมูล: ${evaluation.evaluatorName || '-'}\n📞 ช่องทาง: ${channelText}\n📍 พิกัด/ที่อยู่: ${locationText}\n🏷️ ราคากับคู่แข่ง: ${priceInfo.label}${evaluation.feedbackPriceNote ? ` (${evaluation.feedbackPriceNote})` : ''}${evaluation.additionalFeedback ? `\n💬 ข้อเสนอแนะ: ${evaluation.additionalFeedback}` : ''}`;
+      for (const ep of endpoints) {
+        const fallbackRes = await fetch(ep, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            channelAccessToken: token,
+            to: targetId,
+            messages: [{ type: 'text', text: fallbackText }],
+          }),
+        });
+        if (fallbackRes.ok) {
+          return {
+            success: true,
+            message: `ส่งข้อมูลการเข้าพบร้าน "${evaluation.customerName}" เข้า LINE สำเร็จ (ส่งแบบข้อความสรุป)`,
+          };
+        }
+      }
+    } catch {}
+
     return {
-      success: true,
-      message: `ส่งผลการประเมินรหัส ${evaluation.evaluationCode} (${evaluation.scoreOutOf20}/20 คะแนน) เข้า LINE เรียบร้อยแล้ว`,
+      success: false,
+      message: `ไม่สามารถส่งเข้ากลุ่ม LINE ได้: ${lastError}`,
     };
   } catch (err: any) {
     return {

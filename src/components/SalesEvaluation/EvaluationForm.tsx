@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { JobItem, SalesEvaluation, CompetitorPriceItem, PriceComparisonOption } from '../../types';
 import {
   computeEvaluationScores,
   DEFAULT_COMPETITOR_ITEMS,
   formatPriceComparisonLabel,
-  calculateDistanceKm,
-  BRANCH_LOCATIONS,
 } from '../../utils/evaluationCalculator';
+import { InteractiveMap } from '../InteractiveMap';
 import {
   Star,
   Plus,
@@ -14,7 +13,6 @@ import {
   Sparkles,
   Save,
   Send,
-  Building,
   User,
   Phone,
   Calendar,
@@ -36,7 +34,7 @@ import {
 } from 'lucide-react';
 
 interface EvaluationFormProps {
-  jobs: JobItem[];
+  jobs?: JobItem[];
   preSelectedJobId?: string;
   initialEvaluation?: SalesEvaluation | null;
   onSave: (evaluation: SalesEvaluation, sendLine: boolean) => void;
@@ -44,17 +42,12 @@ interface EvaluationFormProps {
 }
 
 export const EvaluationForm: React.FC<EvaluationFormProps> = ({
-  jobs,
+  jobs = [],
   preSelectedJobId,
   initialEvaluation,
   onSave,
   onCancel,
 }) => {
-  // Pre-fill from initial evaluation or selected job
-  const [selectedJobId, setSelectedJobId] = useState<string>(
-    initialEvaluation?.jobId || preSelectedJobId || ''
-  );
-
   const [date, setDate] = useState<string>(
     initialEvaluation?.date || new Date().toISOString().slice(0, 10)
   );
@@ -85,8 +78,6 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
   const [checkInLocation, setCheckInLocation] = useState<SalesEvaluation['checkInLocation'] | null>(
     initialEvaluation?.checkInLocation || null
   );
-  const [isLocating, setIsLocating] = useState<boolean>(false);
-  const [locationError, setLocationError] = useState<string>('');
 
   // ================= Ratings & Notes =================
   // หมวดที่ 1 (เต็ม 20)
@@ -144,20 +135,6 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
   const [signatureName, setSignatureName] = useState<string>(
     initialEvaluation?.signatureName || ''
   );
-
-  // Link job details
-  useEffect(() => {
-    if (selectedJobId && !initialEvaluation) {
-      const foundJob = jobs.find((j) => j.id === selectedJobId);
-      if (foundJob) {
-        if (!customerName) setCustomerName(foundJob.contactPerson || foundJob.title);
-        if (!customerPhone) setCustomerPhone(foundJob.phoneNumber || '');
-        if (!projectName) setProjectName(foundJob.title);
-        if (!evaluatorName) setEvaluatorName(foundJob.contactPerson || '');
-        if (!salesRepName && foundJob.assignedTo) setSalesRepName(foundJob.assignedTo);
-      }
-    }
-  }, [selectedJobId, jobs]);
 
   // Compute live scores based on exact formula
   const scoreResults = computeEvaluationScores({
@@ -236,45 +213,28 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
     setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleGetLocation = () => {
-    if (!navigator.geolocation) {
-      alert('อุปกรณ์ของคุณไม่รองรับการระบุพิกัด GPS');
-      return;
-    }
-    setIsLocating(true);
-    setLocationError('');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        const branchInfo = BRANCH_LOCATIONS[branch] || BRANCH_LOCATIONS['ตาก'];
-        const linkedJob = jobs.find((j) => j.id === selectedJobId);
+  const handleAddressChange = (addressText: string) => {
+    setCheckInLocation((prev) => ({
+      lat: prev?.lat || (branch === 'แม่สอด' ? 16.7167 : 16.8839),
+      lng: prev?.lng || (branch === 'แม่สอด' ? 98.5667 : 99.1258),
+      address: addressText,
+      distanceKm: 0,
+      isWithinRange: true,
+      targetName: 'พิกัด GPS หน้างานจริง',
+      timestamp: prev?.timestamp || new Date().toLocaleTimeString('th-TH'),
+    }));
+  };
 
-        // จุดอ้างอิง: ถ้างานมีพิกัด ให้เทียบกับพิกัดงาน ถ้าไม่มี ให้เทียบกับพิกัดสาขา
-        const targetLat = linkedJob?.location?.lat || branchInfo.lat;
-        const targetLng = linkedJob?.location?.lng || branchInfo.lng;
-        const targetName = linkedJob?.location?.lat
-          ? `หน้างาน [${linkedJob.jobCode}]`
-          : branchInfo.name;
-
-        const dist = calculateDistanceKm(latitude, longitude, targetLat, targetLng);
-        const isWithinRange = dist <= 5.0;
-
-        setCheckInLocation({
-          lat: Number(latitude.toFixed(6)),
-          lng: Number(longitude.toFixed(6)),
-          distanceKm: dist,
-          isWithinRange,
-          targetName: `${targetName} (เกณฑ์ไม่เกิน 5.0 กม.)`,
-          timestamp: new Date().toLocaleTimeString('th-TH'),
-        });
-        setIsLocating(false);
-      },
-      (err) => {
-        setIsLocating(false);
-        setLocationError('ไม่สามารถดึงพิกัด GPS ได้ กรุณาเปิดระบบระบุตำแหน่ง (Location) บนอุปกรณ์');
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+  const handleMapLocationChange = (newLat: number, newLng: number, newAddress?: string) => {
+    setCheckInLocation((prev) => ({
+      lat: Number(newLat.toFixed(6)),
+      lng: Number(newLng.toFixed(6)),
+      address: newAddress || prev?.address || `${newLat.toFixed(5)}, ${newLng.toFixed(5)}`,
+      distanceKm: 0,
+      isWithinRange: true,
+      targetName: 'พิกัด GPS หน้างานจริง',
+      timestamp: prev?.timestamp || new Date().toLocaleTimeString('th-TH'),
+    }));
   };
 
   const handleSubmit = (sendLine: boolean = false) => {
@@ -291,8 +251,6 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
       return;
     }
 
-    const linkedJob = jobs.find((j) => j.id === selectedJobId);
-
     const newEval: SalesEvaluation = {
       id: initialEvaluation?.id || `eval-${Date.now()}`,
       evaluationCode:
@@ -300,9 +258,9 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
         `EVAL-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
       date,
       branch,
-      jobId: selectedJobId || undefined,
-      jobCode: linkedJob?.jobCode,
-      projectName: projectName || linkedJob?.title,
+      jobId: initialEvaluation?.jobId,
+      jobCode: initialEvaluation?.jobCode,
+      projectName: projectName.trim(),
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
       evaluatorName: evaluatorName.trim(),
@@ -477,42 +435,24 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
       </div>
 
       <div className="p-4 sm:p-6 space-y-6">
-        {/* Top Controls: Link Job, Rating Scale Legend & 1-Click Fill 5 Stars */}
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 p-3.5 bg-blue-50 dark:bg-slate-800/80 rounded-xl border border-blue-200 dark:border-blue-900/50">
-          <div className="flex items-center gap-2 flex-1 w-full lg:w-auto">
-            <Building className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
-              ดึงข้อมูลหน้างาน:
+        {/* Top Controls: Rating Scale Legend & 1-Click Fill 5 Stars */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600 dark:text-slate-300">
+            <span className="font-bold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
+              เกณฑ์ระดับคะแนน:
             </span>
-            <select
-              value={selectedJobId}
-              onChange={(e) => setSelectedJobId(e.target.value)}
-              className="text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-blue-500 w-full md:max-w-xs text-slate-800 dark:text-slate-100"
-            >
-              <option value="">-- ไม่เชื่อมโยง (กรอกอิสระ) --</option>
-              {jobs.map((job) => (
-                <option key={job.id} value={job.id}>
-                  [{job.jobCode}] {job.title} ({job.contactPerson})
-                </option>
-              ))}
-            </select>
+            <span>5 = ดีมาก, 4 = ดี, 3 = ปานกลาง, 2 = ควรปรับปรุง, 1 = ไม่ผ่าน</span>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="text-[11px] text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
-              <span className="font-bold mr-1">เกณฑ์:</span> 5=ดีมาก, 4=ดี, 3=ปานกลาง, 2=ควรปรับปรุง, 1=ไม่ผ่าน
-            </div>
-
-            <button
-              type="button"
-              onClick={handleQuickFillAll5}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
-              title="กดเพื่อให้คะแนนระดับ 5 ทุกข้อทันที"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>⚡ เติมคะแนนเต็มทุกข้อ</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleQuickFillAll5}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
+            title="กดเพื่อให้คะแนนระดับ 5 ทุกข้อทันที"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>⚡ เติมคะแนนเต็มทุกข้อ</span>
+          </button>
         </div>
 
         {/* General Customer / Sales Rep Info */}
@@ -825,9 +765,19 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
 
           {/* ตารางเก็บราคาสินค้า อย่างน้อย 3 รายการ */}
           <div>
-            <span className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">
-              2. เก็บราคาสินค้า อย่างน้อย 3 รายการ (เทียบกับคู่แข่ง เช่น ไทวัสดุ):
-            </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+              <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+                2. เก็บราคาสินค้า อย่างน้อย 3 รายการ (เทียบกับคู่แข่ง เช่น ไทวัสดุ):
+              </span>
+              <button
+                type="button"
+                onClick={handleAddCompetitorItem}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs w-fit cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ เพิ่มรายการสินค้า ({competitorPriceItems.length} รายการ)</span>
+              </button>
+            </div>
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
@@ -889,6 +839,20 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
                 </tbody>
               </table>
             </div>
+
+            <div className="mt-2 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handleAddCompetitorItem}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-dashed border-emerald-300 dark:border-emerald-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ เพิ่มแถวสินค้าคู่แข่ง</span>
+              </button>
+              <span className="text-[11px] text-slate-500">
+                * บันทึกรายการราคาเปรียบเทียบกับคู่แข่งได้ตามจริง
+              </span>
+            </div>
           </div>
 
           {/* สินค้าที่ลูกค้าสนใจ และอยากให้ทางบริษัทฯ ทำราคาให้คือ (5 รายการ ตามภาพที่ 2) */}
@@ -946,26 +910,26 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
           </div>
         </div>
 
-        {/* ================= ส่วนสุดท้าย: ภาพถ่ายหน้างาน & การ Check-in ตำแหน่ง (ไม่บังคับ) ================= */}
+        {/* ================= ส่วนสุดท้าย: ภาพถ่ายหน้างาน & การระบุพิกัดสถานที่ & แผนที่หน้างาน (ไม่บังคับ) ================= */}
         <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200 gap-2">
             <div>
               <h3 className="font-black text-sm text-slate-900 flex items-center gap-2">
-                <Camera className="w-4 h-4 text-emerald-600" />
-                <span>ภาพถ่ายหน้างาน & การ Check-in ตำแหน่ง (ไม่บังคับการลงข้อมูล)</span>
+                <MapPin className="w-4 h-4 text-emerald-600" />
+                <span>ภาพถ่ายหน้างาน & การระบุพิกัดสถานที่ & แผนที่หน้างาน</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                แนบภาพถ่ายร้านค้า/บรรยากาศ และเช็คอินพิกัด GPS หน้างานเพื่อยืนยันระยะไม่เกิน 5 กิโลเมตร
+                ยืนยันการเข้าพบหน้างานจริง พร้อมภาพถ่ายประกอบและพิกัด GPS อุปกรณ์ (รัศมีไม่เกิน 5 กม.)
               </p>
             </div>
             <span className="text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-slate-200 text-slate-700 w-fit">
-              ไม่บังคับ
+              ไม่บังคับการลงข้อมูล
             </span>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* 1. ถ่ายภาพหน้างาน / แนบรูปภาพ */}
-            <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            {/* 1. ถ่ายภาพหน้างาน / แนบรูปภาพ (5 cols) */}
+            <div className="lg:col-span-5 p-4 bg-white rounded-xl border border-slate-200 space-y-3 flex flex-col">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4 text-blue-600" />
@@ -989,7 +953,7 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
               </div>
 
               {photos.length === 0 ? (
-                <div className="py-6 border-2 border-dashed border-slate-200 rounded-xl text-center">
+                <div className="flex-1 min-h-[200px] flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl text-center p-4">
                   <Camera className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
                   <p className="text-xs text-slate-500">ยังไม่มีภาพถ่ายหน้างาน</p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
@@ -997,7 +961,7 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-3 gap-2 overflow-y-auto max-h-[300px]">
                   {photos.map((photo, idx) => (
                     <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-200 aspect-square bg-slate-100">
                       <img src={photo} alt={`Site photo ${idx + 1}`} className="w-full h-full object-cover" />
@@ -1015,80 +979,57 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
               )}
             </div>
 
-            {/* 2. Check-in ตำแหน่ง GPS หน้างาน (ระยะไม่เกิน 5 กิโลเมตร) */}
-            <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4 text-rose-500" />
-                    <span>2. Check-in พิกัด GPS (ระยะไม่เกิน 5 กิโลเมตร)</span>
-                  </span>
-                  <span className="text-[11px] text-slate-500 block mt-0.5">
-                    จุดอ้างอิง: <strong>สาขา {branch}</strong> (เกณฑ์ระยะทางไม่เกิน 5.0 กม.)
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleGetLocation}
-                  disabled={isLocating}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Crosshair className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : ''}`} />
-                  <span>{isLocating ? 'กำลังดึงพิกัด...' : '📍 เช็คอินตำแหน่ง'}</span>
-                </button>
+            {/* 2. ระบุพิกัดสถานที่ & แผนที่หน้างาน (GPS Check-in เหมือน JobFormModal) (7 cols) */}
+            <div className="lg:col-span-7 p-4 bg-white rounded-xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-sky-600" />
+                  <span>2. ระบุพิกัดสถานที่ & แผนที่หน้างาน (Check-in)</span>
+                </span>
+                <span className="text-[11px] text-sky-700 font-semibold bg-sky-100 px-2 py-0.5 rounded-full">
+                  🔒 พิกัด GPS ปัจจุบันเท่านั้น (รัศมีไม่เกิน 5 กม.)
+                </span>
               </div>
 
-              {locationError && (
-                <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs flex items-center gap-1.5">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{locationError}</span>
-                </div>
-              )}
+              {/* Address Name */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  ชื่อสถานที่ / ที่อยู่หน้างาน
+                </label>
+                <input
+                  type="text"
+                  value={checkInLocation?.address || ''}
+                  onChange={(e) => handleAddressChange(e.target.value)}
+                  placeholder="ระบุชื่ออาคาร หมู่บ้าน ถนน ซอย หรือระบบจะระบุให้อัตโนมัติจาก GPS"
+                  className="w-full text-xs sm:text-sm px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                />
+              </div>
 
-              {checkInLocation ? (
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">พิกัด GPS ที่บันทึก:</span>
-                    <span className="font-mono font-bold text-slate-800">
-                      {checkInLocation.lat}, {checkInLocation.lng}
+              {/* Interactive Leaflet GPS Map with 5KM Radius Restriction */}
+              <InteractiveMap
+                lat={checkInLocation?.lat || (branch === 'แม่สอด' ? 16.7167 : 16.8839)}
+                lng={checkInLocation?.lng || (branch === 'แม่สอด' ? 98.5667 : 99.1258)}
+                address={checkInLocation?.address}
+                isEditable={true}
+                height="280px"
+                onLocationChange={handleMapLocationChange}
+              />
+
+              {checkInLocation && (
+                <div className="flex items-center justify-between text-[11px] p-2 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>
+                      ยืนยันพิกัด GPS หน้างานจริงแล้ว • {checkInLocation.lat.toFixed(5)}, {checkInLocation.lng.toFixed(5)} ({checkInLocation.timestamp || 'เช็คอินแล้ว'})
                     </span>
                   </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">เวลาที่เช็คอิน:</span>
-                    <span className="font-semibold text-slate-800">{checkInLocation.timestamp}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-200">
-                    <span className="text-slate-600">ระยะห่างจาก {checkInLocation.targetName}:</span>
-                    <span className="font-black text-sm text-slate-900">
-                      {checkInLocation.distanceKm} กม.
-                    </span>
-                  </div>
-
-                  {/* Range indicator status */}
-                  <div className="pt-1">
-                    {checkInLocation.isWithinRange ? (
-                      <div className="flex items-center gap-1.5 p-2 rounded-lg bg-emerald-100 text-emerald-900 font-bold border border-emerald-300">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>🟢 อยู่ในระยะที่กำหนด (ห่าง {checkInLocation.distanceKm} กม. / ไม่เกิน 5.0 กม.)</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 p-2 rounded-lg bg-amber-100 text-amber-900 font-bold border border-amber-300">
-                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>🟠 เกินระยะ 5 กิโลเมตร (ห่าง {checkInLocation.distanceKm} กม. - บันทึกพิกัดจริงเพื่อการตรวจสอบ)</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="py-6 border-2 border-dashed border-slate-200 rounded-xl text-center">
-                  <MapPin className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
-                  <p className="text-xs text-slate-500">ยังไม่ได้ทำการเช็คอินพิกัด</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    กดปุ่ม "📍 เช็คอินตำแหน่ง" เพื่อบันทึกพิกัดจริงและตรวจระยะห่างจากสาขา
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setCheckInLocation(null)}
+                    className="text-slate-400 hover:text-rose-600 underline cursor-pointer shrink-0 ml-2"
+                  >
+                    ล้างพิกัด
+                  </button>
                 </div>
               )}
             </div>

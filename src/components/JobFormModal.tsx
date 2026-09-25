@@ -156,9 +156,6 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
     if (!formData.contactPerson?.trim()) errs.contactPerson = 'กรุณาระบุชื่อผู้ติดต่อ';
     if (!formData.phoneNumber?.trim()) errs.phoneNumber = 'กรุณาระบุเบอร์ติดต่อ';
     if (!formData.date) errs.date = 'กรุณาเลือกวันที่';
-    if (!formData.productBrand?.trim() && rounds.every((r) => !r.products || r.products.length === 0)) {
-      errs.productBrand = 'กรุณาระบุแบรนด์สินค้า หรือเพิ่มรายการสินค้าในรอบงาน';
-    }
     if (formData.price === undefined || formData.price < 0) errs.price = 'กรุณาระบุราคาที่ถูกต้อง';
 
     setErrors(errs);
@@ -549,38 +546,6 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
               currentJobStatus={formData.status as JobStatus}
               defaultAssignedTo={formData.assignedTo}
             />
-
-            {/* Summary Brand & Details Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  แบรนด์สินค้าหลัก <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.productBrand || ''}
-                  onChange={(e) => setFormData({ ...formData, productBrand: e.target.value })}
-                  placeholder="เช่น SCG / COTTO, Daikin, TOA, Schneider"
-                  className={`w-full text-sm px-3.5 py-2 bg-white border ${
-                    errors.productBrand ? 'border-rose-400' : 'border-slate-300'
-                  } rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none font-medium`}
-                />
-                {errors.productBrand && <p className="text-xs text-rose-600 mt-1">{errors.productBrand}</p>}
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  สรุปรายละเอียดสินค้าสำหรับ LINE Flex / รายงาน
-                </label>
-                <input
-                  type="text"
-                  value={formData.productDetails || ''}
-                  onChange={(e) => setFormData({ ...formData, productDetails: e.target.value })}
-                  placeholder="เช่น ปูนซีเมนต์ 15 ถุง, กระเบื้อง 45 กล่อง"
-                  className="w-full text-sm px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                />
-              </div>
-            </div>
 
             {/* Price (THB) & Payment Type */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">

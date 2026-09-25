@@ -372,9 +372,16 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
                         </span>
                       )}
                       {ev.checkInLocation && (
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${ev.checkInLocation.isWithinRange ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-amber-50 text-amber-700 border-amber-300'}`}>
-                          📍 {ev.checkInLocation.distanceKm} กม. ({ev.checkInLocation.isWithinRange ? 'ไม่เกิน 5 กม.' : 'เกิน 5 กม.'})
-                        </span>
+                        <a
+                          href={`https://www.google.com/maps?q=${ev.checkInLocation.lat},${ev.checkInLocation.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-[11px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 transition-colors"
+                          title={ev.checkInLocation.address ? `ที่อยู่: ${ev.checkInLocation.address}` : `พิกัด GPS: ${ev.checkInLocation.lat}, ${ev.checkInLocation.lng}`}
+                        >
+                          📍 GPS หน้างาน ({ev.checkInLocation.lat.toFixed(4)}, {ev.checkInLocation.lng.toFixed(4)})
+                        </a>
                       )}
                     </div>
 

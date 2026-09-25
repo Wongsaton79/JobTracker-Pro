@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
-import { MapPin, Compass, Loader2, ExternalLink, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { MapPin, Compass, Loader2, ExternalLink, ShieldCheck, AlertTriangle, Search } from 'lucide-react';
 
 interface InteractiveMapProps {
   lat: number;
@@ -20,6 +20,8 @@ interface InteractiveMapProps {
     price: number;
   }>;
   onMarkerClick?: (id: string) => void;
+  allowRetrospective?: boolean;
+  defaultFreeMode?: boolean;
 }
 
 // 📐 Haversine Formula for distance in kilometers
@@ -66,6 +68,8 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   height = '300px',
   allMarkers,
   onMarkerClick,
+  allowRetrospective = true,
+  defaultFreeMode = false,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -79,6 +83,9 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   const [deviceGps, setDeviceGps] = useState<{ lat: number; lng: number } | null>(null);
   const [currentDistance, setCurrentDistance] = useState<number | null>(null);
   const [radiusWarning, setRadiusWarning] = useState<string | null>(null);
+  const [isFreeMode, setIsFreeMode] = useState<boolean>(defaultFreeMode);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isSearching, setIsSearching] = useState<boolean>(false);
 
   const MAX_RADIUS_KM = 5.0; // 5 Kilometers limit
 
@@ -252,12 +259,12 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     }
   }, []);
 
-  // Check distance and clamp if beyond 5km
+  // Check distance and clamp if beyond 5km (unless in free/retrospective mode)
   const applyLocationWithRadiusCheck = (targetLat: number, targetLng: number) => {
     let finalLat = targetLat;
     let finalLng = targetLng;
 
-    if (deviceGps) {
+    if (!isFreeMode && deviceGps) {
       const clampResult = clampToRadius(
         deviceGps.lat,
         deviceGps.lng,
@@ -272,17 +279,54 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
       if (clampResult.wasClamped) {
         setRadiusWarning(
-          `⚠️ ปักหมุดอยู่นอกรัศมี 5 กม. ระบบได้จำกัดหมุดให้อยู่ที่ขอบรัศมี 5.0 กม. จากพิกัด GPS ปัจจุบันของคุณ`
+          `⚠️ ปักหมุดอยู่นอกรัศมี 5 กม. ระบบจำกัดหมุดให้อยู่ในขอบเขต 5.0 กม. จากพิกัด GPS อุปกรณ์ (หากเป็นการลงข้อมูลย้อนหลัง สามารถสลับไปใช้แท็บ "บันทึกย้อนหลัง (ปักหมุดอิสระ)")`
         );
       } else {
         setRadiusWarning(null);
       }
+    } else {
+      setCurrentDistance(null);
+      setRadiusWarning(null);
     }
 
     if (markerRef.current) {
       markerRef.current.setLatLng([finalLat, finalLng]);
     }
     reverseGeocode(finalLat, finalLng);
+  };
+
+  // Place Search (Nominatim OpenStreetMap)
+  const handleSearchPlace = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    setGpsError(null);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          searchQuery.trim()
+        )}&countrycodes=th&limit=1`,
+        { headers: { 'User-Agent': 'JobTrackerPro/1.0' } }
+      );
+      if (res.ok) {
+        const results = await res.json();
+        if (results && results.length > 0) {
+          const item = results[0];
+          const newLat = parseFloat(item.lat);
+          const newLng = parseFloat(item.lon);
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.setView([newLat, newLng], 15);
+          }
+          applyLocationWithRadiusCheck(newLat, newLng);
+        } else {
+          setGpsError(`ไม่พบสถานที่ "${searchQuery}" กรุณาระบุชื่ออำเภอหรือจังหวัดเพิ่มเติม`);
+        }
+      }
+    } catch (err) {
+      console.warn('Place search error:', err);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   // Re-render allMarkers overview if provided
@@ -342,56 +386,138 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
   return (
     <div className="relative w-full flex flex-col gap-2">
-      {/* Location Toolbar for Editable Mode (GPS ONLY, Search Removed, 5KM Radius Enforced) */}
+      {/* Location Toolbar for Editable Mode */}
       {isEditable && (
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-sky-50/80 p-2.5 rounded-xl border border-sky-200">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Compass className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-slate-800">
-                  ระบุพิกัดจาก GPS อุปกรณ์ปัจจุบัน
-                </span>
-                <span className="text-[10px] bg-sky-100 text-sky-800 border border-sky-300 px-1.5 py-0.2 rounded-full font-medium">
-                  จำกัดรัศมีไม่เกิน 5 กม.
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500">
-                {deviceGps ? (
-                  currentDistance !== null ? (
-                    <span className="text-sky-700 font-semibold">
-                      📍 ระยะห่างจาก GPS ของคุณ: {currentDistance.toFixed(2)} กม. (สูงสุด 5.0 กม.)
-                    </span>
-                  ) : (
-                    'พร้อมจับพิกัดแล้ว • สามารถลากหมุดปรับตำแหน่งในวง 5 กม. ได้'
-                  )
-                ) : (
-                  'กดปุ่มด้านขวาเพื่อดึงพิกัด GPS อัตโนมัติ'
-                )}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleGetCurrentLocation}
-            disabled={isGettingGps}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all shadow-xs active:scale-95 shrink-0"
-          >
-            {isGettingGps ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>กำลังดึงพิกัด GPS...</span>
-              </>
-            ) : (
-              <>
+        <div className="flex flex-col rounded-xl border border-sky-200 dark:border-slate-700 bg-sky-50/80 dark:bg-slate-800/90 overflow-hidden">
+          {/* Mode Switch Tabs: Onsite GPS 5KM vs Retrospective Free Pin */}
+          {allowRetrospective && (
+            <div className="flex border-b border-sky-200 dark:border-slate-700 bg-sky-100/60 dark:bg-slate-900/60 p-1.5 gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFreeMode(false);
+                  if (deviceGps) updateRadiusCircle(deviceGps.lat, deviceGps.lng);
+                }}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  !isFreeMode
+                    ? 'bg-sky-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-800'
+                }`}
+              >
                 <Compass className="w-3.5 h-3.5" />
-                <span>🎯 อัพเดทพิกัด GPS ตอนนี้</span>
-              </>
+                <span>📍 เช็คอินหน้างานสด (GPS 5 กม.)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFreeMode(true);
+                  if (radiusCircleRef.current) radiusCircleRef.current.remove();
+                  if (gpsCenterMarkerRef.current) gpsCenterMarkerRef.current.remove();
+                  setRadiusWarning(null);
+                  setCurrentDistance(null);
+                }}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  isFreeMode
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-800'
+                }`}
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                <span>📝 บันทึกข้อมูลย้อนหลัง (ปักหมุดอิสระทุกที่)</span>
+              </button>
+            </div>
+          )}
+
+          <div className="p-2.5 space-y-2">
+            {!isFreeMode ? (
+              // Mode A: Onsite GPS Mode
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Compass className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                        ระบุพิกัดจาก GPS อุปกรณ์ปัจจุบัน
+                      </span>
+                      <span className="text-[10px] bg-sky-100 text-sky-800 border border-sky-300 px-1.5 py-0.2 rounded-full font-medium">
+                        จำกัดรัศมีไม่เกิน 5 กม.
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {deviceGps ? (
+                        currentDistance !== null ? (
+                          <span className="text-sky-700 dark:text-sky-400 font-semibold">
+                            📍 ระยะห่างจาก GPS ของคุณ: {currentDistance.toFixed(2)} กม. (สูงสุด 5.0 กม.)
+                          </span>
+                        ) : (
+                          'พร้อมจับพิกัดแล้ว • สามารถลากหมุดปรับตำแหน่งในวง 5 กม. ได้'
+                        )
+                      ) : (
+                        'กดปุ่มด้านขวาเพื่อดึงพิกัด GPS อัตโนมัติ'
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGetCurrentLocation}
+                  disabled={isGettingGps}
+                  className="flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all shadow-xs active:scale-95 shrink-0 cursor-pointer"
+                >
+                  {isGettingGps ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>กำลังดึงพิกัด GPS...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Compass className="w-3.5 h-3.5" />
+                      <span>🎯 อัพเดทพิกัด GPS ตอนนี้</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              // Mode B: Retrospective Free Mode
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs text-amber-800 dark:text-amber-300 font-semibold">
+                    <MapPin className="w-4 h-4 text-amber-600" />
+                    <span>โหมดบันทึกย้อนหลัง: สามารถคลิกบนแผนที่หรือลากหมุดไปที่ไหนก็ได้ตามต้องการ</span>
+                  </div>
+                  <span className="text-[10px] bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border border-amber-300 px-2 py-0.5 rounded-full font-bold">
+                    ปักหมุดอิสระ
+                  </span>
+                </div>
+
+                {/* Quick place search */}
+                <form onSubmit={handleSearchPlace} className="flex gap-1.5">
+                  <div className="relative flex-1">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="พิมพ์ค้นหาชื่ออำเภอ ตำบล หรือสถานที่ เช่น เชียงเงิน ตาก หรือ แม่ท้อ..."
+                      className="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-amber-500"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSearching}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
+                  >
+                    {isSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    <span>ค้นหา</span>
+                  </button>
+                </form>
+              </div>
             )}
-          </button>
+          </div>
         </div>
       )}
 
@@ -430,9 +556,18 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         </a>
 
         {isEditable && (
-          <div className="absolute top-2 left-2 z-[400] bg-white/95 backdrop-blur-xs px-2.5 py-1.5 rounded-lg text-[11px] text-slate-700 shadow-sm border border-slate-200 flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-            <span>วงกลมเส้นประสีฟ้า = ขอบเขตรัศมี 5 กม. จาก GPS</span>
+          <div className="absolute top-2 left-2 z-[400] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs px-2.5 py-1.5 rounded-lg text-[11px] text-slate-700 dark:text-slate-200 shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-1.5">
+            {isFreeMode ? (
+              <>
+                <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>📝 ปักหมุดอิสระทุกที่ (โหมดบันทึกย้อนหลัง)</span>
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                <span>วงกลมเส้นประสีฟ้า = รัศมี 5 กม. จาก GPS สด</span>
+              </>
+            )}
           </div>
         )}
       </div>

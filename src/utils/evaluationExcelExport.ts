@@ -32,7 +32,7 @@ export function exportEvaluationsToExcel(evaluations: SalesEvaluation[], company
         'ช่องทางให้ข้อมูล': channel,
         'โครงการ / หน้างาน': item.projectName || item.jobCode || '-',
         'Check-in พิกัด GPS': item.checkInLocation
-          ? `${item.checkInLocation.lat}, ${item.checkInLocation.lng} (${item.checkInLocation.distanceKm} กม. - ${item.checkInLocation.isWithinRange ? 'ไม่เกิน 5 กม.' : 'เกิน 5 กม.'})`
+          ? `${item.checkInLocation.lat}, ${item.checkInLocation.lng}${item.checkInLocation.address ? ` (${item.checkInLocation.address})` : ''}`
           : '-',
         'จำนวนรูปถ่ายหน้างาน': item.photos?.length || 0,
 

@@ -55,7 +55,7 @@ export const SalesEvaluationView: React.FC<SalesEvaluationViewProps> = ({
     });
 
     if (sendLine) {
-      showToast('กำลังส่งผลประเมินเข้ากลุ่ม LINE...', 'info');
+      showToast('กำลังส่งข้อมูลการเข้าพบเข้ากลุ่ม LINE...', 'info');
       const lineRes = await sendEvaluationToLine(evaluation, settings);
       if (lineRes.success) {
         showToast(lineRes.message, 'success');
@@ -70,17 +70,17 @@ export const SalesEvaluationView: React.FC<SalesEvaluationViewProps> = ({
 
   // Handle Direct Send LINE from list
   const handleDirectSendLine = async (evaluation: SalesEvaluation) => {
-    showToast(`กำลังส่งผลประเมินรหัส ${evaluation.evaluationCode} เข้ากลุ่ม LINE...`, 'info');
+    showToast(`กำลังส่งข้อมูลการเข้าพบร้าน "${evaluation.customerName}" เข้ากลุ่ม LINE...`, 'info');
     const lineRes = await sendEvaluationToLine(evaluation, settings);
     if (lineRes.success) {
       showToast(lineRes.message, 'success');
       addAuditLog({
         userName: settings.currentUser || 'เจ้าหน้าที่ระบบ',
         action: 'line_notify',
-        actionLabel: 'ส่งผลประเมินเข้า LINE',
+        actionLabel: 'ส่งข้อมูลการเข้าพบเข้า LINE',
         jobCode: evaluation.jobCode,
         jobTitle: evaluation.projectName || evaluation.customerName,
-        details: `ส่งสรุปคะแนนประเมินทีมขาย "${evaluation.salesRepName}" (${evaluation.totalScore ?? evaluation.rawTotalScore ?? 30}/30 คะแนน) เข้า LINE Group`,
+        details: `ส่งข้อมูลการเข้าพบร้าน "${evaluation.customerName}" (พนักงาน: ${evaluation.salesRepName}) เข้า LINE Group`,
       });
     } else {
       showToast(lineRes.message, 'error');

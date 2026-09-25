@@ -704,6 +704,63 @@ app.post('/api/sync/send-line', async (req, res) => {
 });
 
 // ==========================================
+// 🌟 API ROUTE 2B: Generic LINE Relay / Evaluation Push
+// ==========================================
+app.post(['/api/line-relay', '/api/sync/send-evaluation-line'], async (req, res) => {
+  try {
+    const token = (
+      req.body.channelAccessToken ||
+      req.headers.authorization?.replace(/^Bearer\s+/i, '') ||
+      DEFAULT_LINE_TOKEN
+    ).trim();
+
+    const target = (
+      req.body.to ||
+      req.body.targetId ||
+      DEFAULT_LINE_GROUP
+    ).trim();
+
+    const rawMessages = req.body.messages || (req.body.payload ? (Array.isArray(req.body.payload) ? req.body.payload : [req.body.payload]) : []);
+
+    if (!rawMessages || !Array.isArray(rawMessages) || rawMessages.length === 0) {
+      return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลข้อความ (messages)' });
+    }
+
+    const pushRes = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        to: target,
+        messages: rawMessages.slice(0, 5),
+      }),
+    });
+
+    const pushText = await pushRes.text();
+    if (pushRes.ok) {
+      console.log('✅ LINE Relay Push Sent Successfully to', target);
+      return res.json({ success: true, message: 'ส่งข้อความเข้ากลุ่ม LINE สำเร็จเรียบร้อย' });
+    }
+
+    console.error('❌ LINE Relay Push Error:', pushRes.status, pushText);
+    return res.status(pushRes.status).json({
+      success: false,
+      status: pushRes.status,
+      message: `LINE API Error (${pushRes.status}): ${pushText}`,
+    });
+  } catch (err: any) {
+    console.error('Server LINE Relay Exception:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || String(err),
+      message: `เซิร์ฟเวอร์เกิดข้อผิดพลาดในการส่ง LINE: ${err.message || err}`,
+    });
+  }
+});
+
+// ==========================================
 // 🌟 API ROUTE 3: Direct LINE Connection Test
 // ==========================================
 app.get('/api/sync/test-line', (req, res) => {

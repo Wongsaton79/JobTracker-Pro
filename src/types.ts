@@ -185,9 +185,10 @@ export interface SalesEvaluation {
   checkInLocation?: {
     lat: number;
     lng: number;
-    distanceKm?: number; // ระยะทางเทียบจุดอ้างอิงสาขา/หน้างาน (กม.)
+    address?: string; // ชื่อสถานที่ / ที่อยู่หน้างาน
+    distanceKm?: number; // ระยะทางเทียบจุดอ้างอิงหน้างาน (กม.)
     isWithinRange?: boolean; // ระยะไม่เกิน 5 กิโลเมตร
-    targetName?: string; // เช่น "สาขา ตาก (ไม่เกิน 5 กม.)"
+    targetName?: string; // เช่น "พิกัด GPS หน้างานจริง"
     timestamp?: string;
   };
 

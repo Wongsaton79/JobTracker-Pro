@@ -190,9 +190,10 @@ export const EvaluationPrintModal: React.FC<EvaluationPrintModalProps> = ({
             <div><span className="font-semibold text-slate-600">วันที่ประเมิน:</span> {evaluation.date}</div>
             {evaluation.checkInLocation && (
               <div>
-                <span className="font-semibold text-slate-600">Check-in พิกัด:</span>{' '}
-                <span className={`font-bold ${evaluation.checkInLocation.isWithinRange ? 'text-emerald-700' : 'text-amber-700'}`}>
-                  {evaluation.checkInLocation.distanceKm} กม. ({evaluation.checkInLocation.isWithinRange ? 'ไม่เกิน 5 กม.' : 'เกิน 5 กม.'})
+                <span className="font-semibold text-slate-600">พิกัด GPS หน้างาน:</span>{' '}
+                <span className="font-bold text-emerald-800">
+                  {evaluation.checkInLocation.lat.toFixed(4)}, {evaluation.checkInLocation.lng.toFixed(4)}
+                  {evaluation.checkInLocation.address ? ` (${evaluation.checkInLocation.address})` : ''}
                 </span>
               </div>
             )}
@@ -374,10 +375,10 @@ export const EvaluationPrintModal: React.FC<EvaluationPrintModalProps> = ({
           {((evaluation.photos && evaluation.photos.length > 0) || evaluation.checkInLocation) && (
             <div className="border border-slate-300 rounded p-3 mb-4 text-[11px] bg-slate-50/50">
               <div className="font-bold text-slate-800 mb-2 flex items-center justify-between">
-                <span>📷 ข้อมูลหน้างาน & พิกัด Check-in:</span>
+                <span>📷 ภาพถ่าย & พิกัด GPS ยืนยันหน้างานจริง:</span>
                 {evaluation.checkInLocation && (
                   <span className="text-[10px] text-slate-600">
-                    พิกัด: {evaluation.checkInLocation.lat}, {evaluation.checkInLocation.lng} • ระยะห่าง: {evaluation.checkInLocation.distanceKm} กม. ({evaluation.checkInLocation.isWithinRange ? 'อยู่ในเกณฑ์ <=5 กม.' : 'เกิน 5 กม.'})
+                    พิกัด: {evaluation.checkInLocation.lat}, {evaluation.checkInLocation.lng} {evaluation.checkInLocation.address ? `• ที่อยู่: ${evaluation.checkInLocation.address}` : ''}
                   </span>
                 )}
               </div>
