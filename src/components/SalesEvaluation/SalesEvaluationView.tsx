@@ -4,6 +4,7 @@ import { EvaluationListView } from './EvaluationListView';
 import { EvaluationForm } from './EvaluationForm';
 import { EvaluationAnalytics } from './EvaluationAnalytics';
 import { EvaluationPrintModal } from './EvaluationPrintModal';
+import { EvaluationImageExportModal } from './EvaluationImageExportModal';
 import { exportEvaluationsToExcel } from '../../utils/evaluationExcelExport';
 import { sendEvaluationToLine } from '../../utils/evaluationLineNotify';
 import { addAuditLog } from '../../utils/auditLogger';
@@ -39,9 +40,10 @@ export const SalesEvaluationView: React.FC<SalesEvaluationViewProps> = ({
   const [subTab, setSubTab] = useState<'list' | 'form' | 'analytics'>('list');
   const [editingEvaluation, setEditingEvaluation] = useState<SalesEvaluation | null>(null);
   const [printingEvaluation, setPrintingEvaluation] = useState<SalesEvaluation | null>(null);
+  const [imageExportEvaluation, setImageExportEvaluation] = useState<SalesEvaluation | null>(null);
 
   // Handle Save from Form
-  const handleSave = async (evaluation: SalesEvaluation, sendLine: boolean) => {
+  const handleSave = async (evaluation: SalesEvaluation, sendLine: boolean, openImageModal?: boolean) => {
     onSaveEvaluation(evaluation);
     showToast(`✅ บันทึกแบบประเมิน "${evaluation.customerName}" เรียบร้อยแล้ว`, 'success');
 
@@ -54,13 +56,17 @@ export const SalesEvaluationView: React.FC<SalesEvaluationViewProps> = ({
       details: `บันทึกแบบประเมินทีมขาย "${evaluation.salesRepName}" คะแนนเต็ม 30 ได้ ${evaluation.totalScore ?? evaluation.rawTotalScore ?? 30}/30 คะแนน (${evaluation.percentageScore}%)`,
     });
 
-    if (sendLine) {
+    if (openImageModal) {
+      setImageExportEvaluation(evaluation);
+    } else if (sendLine) {
       showToast('กำลังส่งข้อมูลการเข้าพบเข้ากลุ่ม LINE...', 'info');
       const lineRes = await sendEvaluationToLine(evaluation, settings);
       if (lineRes.success) {
         showToast(lineRes.message, 'success');
       } else {
         showToast(lineRes.message, 'error');
+        // If LINE bot push failed (e.g. deployed on GitHub without backend), open the image export modal so user can share/note directly!
+        setImageExportEvaluation(evaluation);
       }
     }
 
@@ -84,6 +90,8 @@ export const SalesEvaluationView: React.FC<SalesEvaluationViewProps> = ({
       });
     } else {
       showToast(lineRes.message, 'error');
+      // Suggest/open image export modal as the perfect fallback
+      setImageExportEvaluation(evaluation);
     }
   };
 
@@ -191,6 +199,7 @@ export const SalesEvaluationView: React.FC<SalesEvaluationViewProps> = ({
           }}
           onDelete={onDeleteEvaluation}
           onPrint={(ev) => setPrintingEvaluation(ev)}
+          onExportImage={(ev) => setImageExportEvaluation(ev)}
           onSendLine={handleDirectSendLine}
           onExportExcel={handleExportExcel}
           onViewStats={() => setSubTab('analytics')}
@@ -222,6 +231,14 @@ export const SalesEvaluationView: React.FC<SalesEvaluationViewProps> = ({
         evaluation={printingEvaluation}
         companyName={settings.companyName || 'JobTracker Pro'}
         onClose={() => setPrintingEvaluation(null)}
+      />
+
+      {/* 🖼️ Evaluation Image Export Modal (สำหรับลง LINE / โน้ตกลุ่ม โดยไม่แสดงคะแนน) */}
+      <EvaluationImageExportModal
+        evaluation={imageExportEvaluation}
+        companyName={settings.companyName || 'บริษัท ฟิลด์ เซอร์วิส แทร็กเกอร์ จำกัด'}
+        onClose={() => setImageExportEvaluation(null)}
+        showToast={showToast}
       />
     </div>
   );

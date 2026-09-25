@@ -21,6 +21,7 @@ import {
   Calendar,
   Sparkles,
   BarChart3,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 interface EvaluationListViewProps {
@@ -29,6 +30,7 @@ interface EvaluationListViewProps {
   onEdit: (evaluation: SalesEvaluation) => void;
   onDelete: (id: string) => void;
   onPrint: (evaluation: SalesEvaluation) => void;
+  onExportImage?: (evaluation: SalesEvaluation) => void;
   onSendLine: (evaluation: SalesEvaluation) => void;
   onExportExcel: () => void;
   onViewStats: () => void;
@@ -40,6 +42,7 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
   onEdit,
   onDelete,
   onPrint,
+  onExportImage,
   onSendLine,
   onExportExcel,
   onViewStats,
@@ -449,6 +452,17 @@ export const EvaluationListView: React.FC<EvaluationListViewProps> = ({
 
                     {/* Actions */}
                     <div className="flex items-center gap-1.5">
+                      {onExportImage && (
+                        <button
+                          onClick={() => onExportImage(ev)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 hover:bg-purple-100 dark:hover:bg-purple-900/60 rounded-xl transition-colors border border-purple-200 dark:border-purple-800 text-xs font-semibold"
+                          title="🖼️ บันทึก / แชร์เป็นรูปภาพเพื่อนำไปลงกลุ่ม LINE (ไม่แสดงคะแนน)"
+                        >
+                          <ImageIcon className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                          <span>รูปภาพ LINE</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => onPrint(ev)}
                         className="p-2 text-slate-600 dark:text-slate-300 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-xl transition-colors border border-slate-200 dark:border-slate-700"

@@ -37,7 +37,7 @@ interface EvaluationFormProps {
   jobs?: JobItem[];
   preSelectedJobId?: string;
   initialEvaluation?: SalesEvaluation | null;
-  onSave: (evaluation: SalesEvaluation, sendLine: boolean) => void;
+  onSave: (evaluation: SalesEvaluation, sendLine: boolean, openImageModal?: boolean) => void;
   onCancel: () => void;
 }
 
@@ -237,7 +237,7 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
     }));
   };
 
-  const handleSubmit = (sendLine: boolean = false) => {
+  const handleSubmit = (sendLine: boolean = false, openImageModal: boolean = false) => {
     if (!customerName.trim()) {
       alert('กรุณากรอกชื่อร้านค้า / ลูกค้า');
       return;
@@ -328,7 +328,7 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
       syncStatus: 'synced',
     };
 
-    onSave(newEval, sendLine);
+    onSave(newEval, sendLine, openImageModal);
   };
 
   // Reusable Question Input Card with Rating (5, 4, 3, 2, 1, 0) + Note field
@@ -682,21 +682,21 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
             )}
           </div>
 
-          {/* Real-time Score Ratio Summary Box */}
+          {/* Real-time Score Summary Box */}
           <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border-2 border-emerald-400 dark:border-emerald-600 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
               <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 block">
-                ⭐ สรุปผลคะแนนประเมิน (คิดเป็นอัตราส่วนคะแนนเต็ม 20 คะแนน):
+                ⭐ สรุปผลคะแนนประเมิน (คะแนนเต็ม 30 คะแนน):
               </span>
               <span className="text-[11px] text-emerald-700 dark:text-emerald-300">
-                คะแนนดิบ 3 หมวด: {scoreResults.rawTotalScore} / 30 คะแนน • ร้อยละความพึงพอใจ: {scoreResults.percentageScore}%
+                หมวด 1: {scoreResults.section1Score}/20 • หมวด 2: {scoreResults.section2Score}/5 • หมวด 3: {scoreResults.section3Score}/5 • ร้อยละความพึงพอใจ: {scoreResults.percentageScore}%
               </span>
             </div>
             <div className="text-right self-end sm:self-center">
               <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300">
-                {scoreResults.scoreOutOf20}
+                {scoreResults.totalScore}
               </span>
-              <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200"> / 20.00 คะแนน</span>
+              <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200"> / 30.00 คะแนน</span>
               <div className="text-xs font-bold text-emerald-600">{scoreResults.gradeLabel}</div>
             </div>
           </div>
@@ -1046,10 +1046,20 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
             ยกเลิก
           </button>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
             <button
               type="button"
-              onClick={() => handleSubmit(true)}
+              onClick={() => handleSubmit(false, true)}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 active:scale-95 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer"
+              title="บันทึกข้อมูล พร้อมเปิดหน้าต่างรูปภาพสรุป (ไม่แสดงคะแนน) เพื่อคัดลอก/ลงโน้ตในกลุ่ม LINE ได้ทันที"
+            >
+              <ImageIcon className="w-4 h-4" />
+              <span>บันทึก & สร้างรูปภาพ LINE</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSubmit(true, false)}
               className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer"
               title="บันทึกข้อมูล พร้อมส่งการ์ดสรุปผลเข้า LINE Group ทันที"
             >
@@ -1059,7 +1069,7 @@ export const EvaluationForm: React.FC<EvaluationFormProps> = ({
 
             <button
               type="button"
-              onClick={() => handleSubmit(false)}
+              onClick={() => handleSubmit(false, false)}
               className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer"
             >
               <Save className="w-4 h-4" />
